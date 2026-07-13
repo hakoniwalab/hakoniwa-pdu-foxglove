@@ -29,15 +29,6 @@ void handle_signal(int)
     g_stop.store(true);
 }
 
-std::vector<std::byte> to_byte_payload(const std::vector<std::uint8_t>& src)
-{
-    std::vector<std::byte> dst(src.size());
-    for (std::size_t i = 0; i < src.size(); ++i) {
-        dst[i] = static_cast<std::byte>(src[i]);
-    }
-    return dst;
-}
-
 struct DisplayConfig {
     std::string host = "127.0.0.1";
     int port = 8765;
@@ -134,8 +125,8 @@ int main(int argc, char* argv[])
             return 1;
         }
 
-        const auto payload = to_byte_payload(cdr_payload);
-        err = endpoint.send(key, std::span<const std::byte>(payload.data(), payload.size()));
+        const auto payload = std::as_bytes(std::span{cdr_payload});
+        err = endpoint.send(key, payload);
         if (err != HAKO_PDU_ERR_OK) {
             std::cerr << "Foxglove CDR send failed: err=" << static_cast<int>(err) << std::endl;
             (void)endpoint.stop();
