@@ -54,7 +54,7 @@ flowchart LR
     REG[hakoniwa-pdu-registry]
     EP[hakoniwa-pdu-endpoint\nEndpoint OUT]
     COM[FoxgloveComm\nPduComm adapter]
-    PUB[FoxglovePublisher\nSDK-independent boundary]
+    PUB[FoxglovePublisher\nEndpoint-independent boundary]
     SDK[Foxglove SDK\nRawChannel + WebSocketServer]
     UI[Foxglove App]
 
