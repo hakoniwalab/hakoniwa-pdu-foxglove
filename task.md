@@ -328,3 +328,95 @@ Do not implement these as part of this task:
 - packaged installation or apt distribution.
 
 Finish version 0.1 first and leave these as documented follow-up work.
+
+## Implementation Result
+
+Implemented version 0.1 in this repository.
+
+Completed:
+
+- [x] Added `hakoniwa-pdu-registry` as a root-level Git submodule.
+- [x] Confirmed `hakoniwa-pdu-endpoint` remains a root-level Git submodule.
+- [x] Added top-level CMake project using C++20.
+- [x] Added reproducible Foxglove SDK integration in `cmake/FoxgloveSdk.cmake`.
+- [x] Added `build.bash` and `test.bash` with `set -euo pipefail`.
+- [x] Added `.gitignore` for CMake and local SDK artifacts.
+- [x] Implemented typed Foxglove config parsing and validation.
+- [x] Implemented endpoint-independent `FoxglovePublisher`.
+- [x] Implemented `FoxgloveComm final : hakoniwa::pdu::PduComm`.
+- [x] Added CDR publisher example using `Endpoint::set_comm()`.
+- [x] Added sample Endpoint and Foxglove communication configs.
+- [x] Added Docker-based live smoke environment for Ubuntu container execution.
+- [x] Added automated tests for config validation, lifecycle, unsupported receive
+      APIs, unknown keys, repeated stop/close, start failure, and byte-for-byte
+      forwarding through a mock publisher boundary.
+- [x] Updated `README.md` with build, test, example, SDK pinning, registry
+      artifact, Docker live smoke, and Foxglove connection steps.
+
+Recorded implementation decisions:
+
+- Foxglove SDK release: `sdk/v0.25.2`.
+- SDK archive selection:
+  - macOS arm64: `foxglove-v0.25.2-cpp-aarch64-apple-darwin.zip`
+  - macOS x86_64: `foxglove-v0.25.2-cpp-x86_64-apple-darwin.zip`
+  - Linux aarch64: `foxglove-v0.25.2-cpp-aarch64-unknown-linux-gnu.zip`
+  - Linux x86_64: `foxglove-v0.25.2-cpp-x86_64-unknown-linux-gnu.zip`
+- Integrity mechanism: CMake `URL_HASH SHA256=...` for each selected SDK
+  archive.
+- Initial smoke-test PDU type: `hako_msgs/SimTime`.
+- Registry-managed schema artifact:
+  `hakoniwa-pdu-registry/idl/hako_msgs/msg/SimTime.msg`.
+- Explicit Foxglove schema encoding: `ros2msg`.
+- Generated registry CDR converter:
+  `hakoniwa-pdu-registry/pdu/types/hako_msgs/pdu_cpptype_cdr_conv_SimTime.hpp`.
+
+Verification performed:
+
+```text
+./test.bash
+100% tests passed, 0 tests failed out of 1
+```
+
+CDR publisher smoke:
+
+```text
+./build/cdr_publisher_example /private/tmp/hako-foxglove-sample/endpoint_foxglove.json 3
+Foxglove WebSocket: ws://127.0.0.1:18765
+Publishing topic: /hakoniwa/FoxgloveDemo/sim_time
+Schema: hako_msgs/msg/SimTime (ros2msg), message encoding: cdr
+published time_usec=0 bytes=12
+published time_usec=100000 bytes=12
+published time_usec=200000 bytes=12
+```
+
+Docker live smoke:
+
+```text
+docker compose -f docker/docker-compose.yml build
+100% tests passed, 0 tests failed out of 1
+
+docker compose -f docker/docker-compose.yml run --rm --no-deps hakoniwa-pdu-foxglove \
+  ctest --test-dir build --output-on-failure
+100% tests passed, 0 tests failed out of 1
+
+./docker/run-smoke-test.bash
+published time_usec=... bytes=12
+```
+
+Foxglove UI confirmation:
+
+- Connected from the host browser to `ws://localhost:8765`.
+- Confirmed topic `/hakoniwa/FoxgloveDocker/sim_time`.
+- Confirmed decoded field `_time_usec` with type `uint64`.
+- Confirmed Raw Messages display using
+  `/hakoniwa/FoxgloveDocker/sim_time`.
+- Confirmed Plot display using
+  `/hakoniwa/FoxgloveDocker/sim_time._time_usec`.
+
+Notes:
+
+- The smoke used a temporary copy of the sample config with port `18765`
+  because `8765` was unavailable in the sandboxed run.
+- Local WebSocket bind required running the example outside the sandbox.
+- Browser-based Foxglove UI Raw Messages and Plot confirmation has been
+  completed with the Docker publisher.

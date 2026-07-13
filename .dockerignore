@@ -1,0 +1,11 @@
+build/
+Build/
+build-*/
+cmake-build*/
+.cache/
+Testing/
+*.log
+*.tmp
+*.dSYM/
+.DS_Store
+

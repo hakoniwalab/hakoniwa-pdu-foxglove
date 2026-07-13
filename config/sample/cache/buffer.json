@@ -1,0 +1,8 @@
+{
+  "type": "buffer",
+  "name": "foxglove_sample_buffer",
+  "store": {
+    "mode": "latest"
+  }
+}
+

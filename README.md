@@ -7,8 +7,7 @@ The initial implementation streams **caller-provided CDR payloads** to Foxglove
 through the official Foxglove SDK WebSocket server. The CDR bytes are forwarded
 without deserialization or re-serialization.
 
-> Status: initial design. See [`task.md`](task.md) for the first implementation
-> task and acceptance criteria.
+> Status: version 0.1 initial implementation.
 
 ## Goal
 
@@ -134,8 +133,7 @@ state transitions. Calling `stop()` or `close()` more than once must be safe.
 
 ## Configuration outline
 
-The exact schema is part of the first implementation task. The intended shape
-is:
+The implemented communication config schema is:
 
 ```json
 {
@@ -148,14 +146,14 @@ is:
   "channels": [
     {
       "pdu_key": {
-        "robot": "Drone",
-        "pdu": "pos"
+        "robot": "FoxgloveDemo",
+        "pdu": "sim_time"
       },
-      "topic": "/hakoniwa/Drone/pos",
+      "topic": "/hakoniwa/FoxgloveDemo/sim_time",
       "schema": {
-        "name": "geometry_msgs::msg::Pose",
-        "encoding": "omgidl",
-        "file": "<path-to-verified-schema-artifact>"
+        "name": "hako_msgs/msg/SimTime",
+        "encoding": "ros2msg",
+        "file": "../../hakoniwa-pdu-registry/idl/hako_msgs/msg/SimTime.msg"
       }
     }
   ]
@@ -225,6 +223,256 @@ The Foxglove SDK is available under the MIT license and provides C++, Python,
 and Rust bindings. Its C++ release archive includes a CMake package config and
 prebuilt C library. Follow the official installation guidance rather than
 building the SDK's Rust core as part of this project.
+
+## Build and Test
+
+Initialize submodules first:
+
+```bash
+git submodule update --init --recursive
+```
+
+Build:
+
+```bash
+./build.bash
+```
+
+Run tests:
+
+```bash
+./test.bash
+```
+
+The build creates:
+
+- `hakoniwa_pdu_foxglove`
+- `cdr_publisher_example`
+- `hakoniwa_pdu_foxglove_tests`
+
+## Foxglove SDK Pin
+
+The CMake integration uses the official Foxglove C++ SDK release archive and
+its package config from `foxglove/foxglove-sdk`.
+
+- SDK release: `sdk/v0.25.2`
+- macOS arm64 archive:
+  `foxglove-v0.25.2-cpp-aarch64-apple-darwin.zip`
+  - SHA256:
+    `8839bde7c4e1142e7cbbf57756d87d2e36a683fad6fb32cbc240038d6e781ad8`
+- macOS x86_64 archive:
+  `foxglove-v0.25.2-cpp-x86_64-apple-darwin.zip`
+  - SHA256:
+    `3ef620496dde842bc35201f87c33cf94e3b3b2b5b5fb8f057ad64bcf0b12238b`
+- Linux aarch64 archive:
+  `foxglove-v0.25.2-cpp-aarch64-unknown-linux-gnu.zip`
+  - SHA256:
+    `72d403cc2ee90e84bd803c08e7dcaa2ddf5175d381f9668b595357a9445c39b6`
+- Linux x86_64 archive:
+  `foxglove-v0.25.2-cpp-x86_64-unknown-linux-gnu.zip`
+  - SHA256:
+    `ac001974aa0e3ac5b8159bcd698007c0661715c4a0201c99353e8a8dfe03bd44`
+
+CMake selects the archive from `CMAKE_SYSTEM_NAME` and
+`CMAKE_SYSTEM_PROCESSOR`. Set `HAKO_PDU_FOXGLOVE_USE_SYSTEM_FOXGLOVE_SDK=ON`
+to use an already installed `foxglove-sdk` package instead.
+
+## CDR Publisher Example
+
+The sample publishes `hako_msgs/SimTime`:
+
+- smoke-test PDU type: `hako_msgs/SimTime`
+- PDU definition: `config/sample/pdudef.json` and
+  `config/sample/pdutypes.json`
+- registry schema artifact:
+  `hakoniwa-pdu-registry/idl/hako_msgs/msg/SimTime.msg`
+- Foxglove schema encoding: `ros2msg`
+- generated registry CDR converter:
+  `hakoniwa-pdu-registry/pdu/types/hako_msgs/pdu_cpptype_cdr_conv_SimTime.hpp`
+- payload: complete DDS CDR payload, including CDR encapsulation
+- topic: `/hakoniwa/FoxgloveDemo/sim_time`
+
+Run from the repository root:
+
+```bash
+./build/cdr_publisher_example config/sample/endpoint_foxglove.json
+```
+
+The example constructs `FoxgloveComm`, injects it with `Endpoint::set_comm()`,
+uses the generated `SimTimeCdr` converter, and publishes a changing
+`time_usec` value. Press `Ctrl-C` to stop.
+
+For a short smoke run:
+
+```bash
+./build/cdr_publisher_example config/sample/endpoint_foxglove.json 3
+```
+
+The default sample WebSocket address is:
+
+```text
+ws://127.0.0.1:8765
+```
+
+If that port is already in use, edit `config/sample/comm_foxglove.json` and
+change `server.port`, then run the example again.
+
+In Foxglove:
+
+1. Open Foxglove.
+2. Choose **Open connection**.
+3. Connect to the printed WebSocket address.
+4. Confirm topic `/hakoniwa/FoxgloveDemo/sim_time`.
+5. In Raw Messages, confirm `time_usec` is decoded.
+6. In Plot, select `time_usec` for a numeric plot.
+
+## Docker Live Smoke
+
+The Docker setup builds the project in an Ubuntu container, runs CTest, and
+starts the existing CDR publisher example. Foxglove itself is not Dockerized;
+run the Foxglove desktop or web app on the host and connect to the container's
+WebSocket server.
+
+The Docker image uses the same CMake configuration as the local build, including
+the pinned Foxglove SDK release in `cmake/FoxgloveSdk.cmake`. Docker-specific
+runtime config is kept under `docker/config/` and is separate from
+`config/sample/`.
+
+Initialize submodules before building the image:
+
+```bash
+git submodule update --init --recursive
+```
+
+Build the Ubuntu image:
+
+```bash
+docker compose -f docker/docker-compose.yml build
+```
+
+Run CTest inside the container:
+
+```bash
+docker compose -f docker/docker-compose.yml run --rm --no-deps hakoniwa-pdu-foxglove \
+  ctest --test-dir build --output-on-failure
+```
+
+Start the CDR publisher:
+
+```bash
+docker compose -f docker/docker-compose.yml up --force-recreate hakoniwa-pdu-foxglove
+```
+
+The container binds the Foxglove WebSocket server to `0.0.0.0:8765` and exposes
+it to the host as:
+
+```text
+ws://localhost:8765
+```
+
+The Docker publisher topic is:
+
+```text
+/hakoniwa/FoxgloveDocker/sim_time
+```
+
+For a single command that builds, runs CTest, and then starts the publisher in
+the foreground:
+
+```bash
+./docker/run-smoke-test.bash
+```
+
+In Foxglove on the host:
+
+1. Open Foxglove Desktop, or open `https://app.foxglove.dev/` in a browser and
+   log in.
+2. If the first-run framework setup screen appears, choose **Go to dashboard**.
+   The ROS 1, ROS 2, PX4, and custom framework choices are not required for
+   this WebSocket smoke test.
+3. Choose **Open connection**.
+4. Select **Foxglove WebSocket**.
+5. Connect to `ws://localhost:8765`.
+6. Confirm the topic tree shows `/hakoniwa/FoxgloveDocker/sim_time`.
+7. Confirm the decoded field appears as `_time_usec` with type `uint64`.
+
+To inspect decoded CDR fields:
+
+1. Add or change a panel to **Raw Messages**.
+2. Enter this message path:
+
+   ```text
+   /hakoniwa/FoxgloveDocker/sim_time
+   ```
+
+3. Confirm `_time_usec` is decoded and increasing.
+
+To plot the numeric field:
+
+1. Add or change a panel to **Plot**.
+2. Enter this message path:
+
+   ```text
+   /hakoniwa/FoxgloveDocker/sim_time._time_usec
+   ```
+
+3. Confirm the plotted value increases over time.
+
+The 3D and Image panels do not show this sample because the Docker smoke data is
+only a `SimTime` CDR message with one numeric field.
+
+To verify reconnect behavior after a container restart:
+
+```bash
+docker compose -f docker/docker-compose.yml restart hakoniwa-pdu-foxglove
+```
+
+Then reconnect Foxglove to `ws://localhost:8765`.
+
+Stop the Docker publisher:
+
+```bash
+docker compose -f docker/docker-compose.yml down
+```
+
+## Current Verification
+
+Verified on macOS arm64:
+
+```text
+./test.bash
+100% tests passed, 0 tests failed out of 1
+
+./build/cdr_publisher_example /private/tmp/hako-foxglove-sample/endpoint_foxglove.json 3
+published time_usec=0 bytes=12
+published time_usec=100000 bytes=12
+published time_usec=200000 bytes=12
+```
+
+The example smoke was run with a temporary copy of the sample config using
+port `18765` because port `8765` was already unavailable in the sandboxed run.
+The sandbox blocks local bind; the WebSocket smoke was verified outside the
+sandbox. Foxglove UI visual confirmation remains a manual step.
+
+Verified with Docker on Ubuntu 24.04:
+
+```text
+docker compose -f docker/docker-compose.yml build
+...
+100% tests passed, 0 tests failed out of 1
+
+docker compose -f docker/docker-compose.yml run --rm --no-deps hakoniwa-pdu-foxglove \
+  ctest --test-dir build --output-on-failure
+...
+100% tests passed, 0 tests failed out of 1
+
+docker compose -f docker/docker-compose.yml up -d --force-recreate hakoniwa-pdu-foxglove
+docker compose -f docker/docker-compose.yml logs --tail=30 hakoniwa-pdu-foxglove
+...
+published time_usec=10100000 bytes=12
+```
+
+Foxglove UI confirmation is manual because it requires the host Foxglove app.
 
 References:
 

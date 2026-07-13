@@ -1,0 +1,8 @@
+{
+  "type": "buffer",
+  "name": "docker_foxglove_sample_buffer",
+  "store": {
+    "mode": "latest"
+  }
+}
+

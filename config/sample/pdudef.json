@@ -1,0 +1,15 @@
+{
+  "paths": [
+    {
+      "id": "default",
+      "path": "pdutypes.json"
+    }
+  ],
+  "robots": [
+    {
+      "name": "FoxgloveDemo",
+      "pdutypes_id": "default"
+    }
+  ]
+}
+

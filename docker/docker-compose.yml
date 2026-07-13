@@ -1,0 +1,12 @@
+services:
+  hakoniwa-pdu-foxglove:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile
+    image: hakoniwa-pdu-foxglove:0.1-live-smoke
+    ports:
+      - "8765:8765"
+    working_dir: /workspace/hakoniwa-pdu-foxglove
+    command: ["./build/cdr_publisher_example", "docker/config/endpoint_foxglove.json"]
+    restart: unless-stopped
+

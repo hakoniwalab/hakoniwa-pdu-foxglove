@@ -1,0 +1,9 @@
+[
+  {
+    "channel_id": 0,
+    "pdu_size": 8,
+    "name": "sim_time",
+    "type": "hako_msgs/SimTime"
+  }
+]
+

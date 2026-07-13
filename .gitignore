@@ -43,6 +43,8 @@
 build/
 Build/
 build-*/
+cmake-build*/
+out/
 
 # CMake generated files
 CMakeFiles/
@@ -51,12 +53,20 @@ cmake_install.cmake
 Makefile
 install_manifest.txt
 compile_commands.json
+CTestTestfile.cmake
+DartConfiguration.tcl
 
 # Temporary files
 *.tmp
 *.log
 *.bak
 *.swp
+*.swo
+.idea/
+.vscode/
+.DS_Store
+._*
+*.dSYM/
 
 # vcpkg
 vcpkg_installed/
@@ -67,3 +77,5 @@ vcpkg_installed/
 # test output & cache
 Testing/
 .cache/
+_deps/
+third_party/foxglove-sdk/

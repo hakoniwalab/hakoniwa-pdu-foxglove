@@ -1,0 +1,23 @@
+{
+  "protocol": "foxglove",
+  "server": {
+    "name": "hakoniwa-pdu-foxglove-docker",
+    "host": "0.0.0.0",
+    "port": 8765
+  },
+  "channels": [
+    {
+      "pdu_key": {
+        "robot": "FoxgloveDocker",
+        "pdu": "sim_time"
+      },
+      "topic": "/hakoniwa/FoxgloveDocker/sim_time",
+      "schema": {
+        "name": "hako_msgs/msg/SimTime",
+        "encoding": "ros2msg",
+        "file": "../../hakoniwa-pdu-registry/idl/hako_msgs/msg/SimTime.msg"
+      }
+    }
+  ]
+}
+

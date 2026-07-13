@@ -1,0 +1,7 @@
+{
+  "name": "docker_foxglove_cdr_publisher_endpoint",
+  "pdu_def_path": "pdudef.json",
+  "cache": "cache/buffer.json",
+  "comm": "comm_foxglove.json"
+}
+
