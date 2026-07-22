@@ -1,0 +1,8 @@
+[
+  {
+    "channel_id": 100,
+    "pdu_size": 1024,
+    "name": "tf",
+    "type": "tf2_msgs/TFMessage"
+  }
+]

@@ -1,0 +1,6 @@
+{
+  "name": "shadow-hand-tcp-server-ep",
+  "pdu_def_path": "../pdu/shadow-hand-pdudef.json",
+  "cache": "../cache/latest.json",
+  "comm": "../comm/shadow-hand-tcp-server.json"
+}

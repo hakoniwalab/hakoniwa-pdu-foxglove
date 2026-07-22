@@ -1,0 +1,22 @@
+{
+  "paths": [
+    {
+      "id": "shadow-hand",
+      "path": "shadow-hand-pdutypes.json"
+    },
+    {
+      "id": "foxglove-runtime",
+      "path": "foxglove-runtime-pdutypes.json"
+    }
+  ],
+  "robots": [
+    {
+      "name": "ShadowHandAsset",
+      "pdutypes_id": "shadow-hand"
+    },
+    {
+      "name": "Foxglove",
+      "pdutypes_id": "foxglove-runtime"
+    }
+  ]
+}

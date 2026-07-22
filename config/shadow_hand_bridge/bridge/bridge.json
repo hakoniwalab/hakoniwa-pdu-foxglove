@@ -1,0 +1,33 @@
+{
+  "version": "2.0.0",
+  "transferPolicies": {
+    "ticker_20ms": { "type": "ticker", "intervalMs": 20 }
+  },
+  "nodes": [
+    { "id": "shadow_hand_foxglove_bridge_node1" }
+  ],
+  "endpoints_config_path": "../endpoint/endpoint_container.json",
+  "wireLinks": [],
+  "pduKeyGroups": {
+    "shadow_hand_joint_states": [
+      {
+        "id": "ShadowHandAsset.joint_states",
+        "robot_name": "ShadowHandAsset",
+        "pdu_name": "joint_states"
+      }
+    ]
+  },
+  "connections": [
+    {
+      "id": "conn_shadow_hand_shm_to_tcp",
+      "nodeId": "shadow_hand_foxglove_bridge_node1",
+      "source": { "endpointId": "shadow-hand-shm-ep" },
+      "destinations": [
+        { "endpointId": "shadow-hand-tcp-ep" }
+      ],
+      "transferPdus": [
+        { "pduKeyGroupId": "shadow_hand_joint_states", "policyId": "ticker_20ms" }
+      ]
+    }
+  ]
+}

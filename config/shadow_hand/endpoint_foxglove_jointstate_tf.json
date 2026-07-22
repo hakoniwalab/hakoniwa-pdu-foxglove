@@ -1,0 +1,6 @@
+{
+  "name": "shadow_hand_foxglove_jointstate_tf_endpoint",
+  "pdu_def_path": "pdudef.json",
+  "cache": "cache/buffer.json",
+  "comm": "comm_foxglove_jointstate_tf.json"
+}

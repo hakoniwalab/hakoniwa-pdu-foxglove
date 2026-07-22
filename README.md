@@ -326,6 +326,199 @@ In Foxglove:
 5. In Raw Messages, confirm `time_usec` is decoded.
 6. In Plot, select `time_usec` for a numeric plot.
 
+## Shadow Hand Foxglove Smoke
+
+The Shadow Hand Foxglove recipe uses a two-process bridge boundary:
+
+```text
+ShadowHandAsset/joint_states
+  -> callback SHM endpoint
+  -> hakoniwa-pdu-bridge-core asset
+  -> TCP endpoint
+  -> TCP-to-CDR converter process
+  -> Foxglove publisher process
+```
+
+The `hakoniwa-pdu-bridge-core` executable is reused as-is. The
+Shadow-Hand-specific bridge configuration is kept in this repository:
+
+```text
+config/shadow_hand_bridge/
+```
+
+This keeps the bridge-core repository clean while keeping the Foxglove recipe's
+scenario configuration close to the Foxglove adapter.
+
+The bridge TCP payload is Hakoniwa native PDU binary, not CDR. The converter
+process receives that TCP payload, decodes `sensor_msgs/JointState` with
+`hakoniwa-pdu-registry`, converts it to CDR, and forwards length-prefixed frames
+to `cdr_stdin_publisher`, which publishes them with `FoxgloveComm`.
+
+Run the smoke test with Hakoniwa Launcher:
+
+```bash
+cd hakoniwa-pdu-endpoint
+cmake -S . -B build-shared -DCMAKE_BUILD_TYPE=Release -DBUILD_SHARED_LIBS=ON
+cmake --build build-shared --parallel
+PATH=$HOME/.pyenv/shims:$PATH BUILD_DIR=build-shared bash build-python.bash
+
+cd ..
+PYTHONPATH=../hakoniwa-mujoco-robots/thirdparty/hakoniwa-core-pro/launcher \
+python3.12 -m hako_launch.hako_launcher \
+  launch/shadow-hand-foxglove-smoke.launch.json
+```
+
+Launcher starts the Shadow Hand asset first because it owns the Hakoniwa
+conductor for this demo. It then starts the Foxglove JointState publisher, the
+bridge asset, and the Python sender, and finally calls `hako-cmd start` after
+the assets have registered. This ordering is required because the bridge reads
+callback SHM as a Hakoniwa asset.
+
+Expected evidence:
+
+- `launch/logs/shadow_hand.out` reaches `WAIT START` and then starts simulation.
+- `launch/logs/shadow_hand_bridge.out` reports the endpoint container and bridge core
+  initialization.
+- `launch/logs/foxglove_jointstate_publisher.err` prints the Foxglove WebSocket
+  address and repeated `sent JointState CDR` records.
+- `launch/logs/foxglove_jointstate_publisher.err` or the nested
+  `cdr_stdin_publisher` output prints repeated `published CDR frame` records.
+
+If Foxglove is not connected during the run, `cdr_stdin_publisher` may print:
+
+```text
+WARNING: No subscribers found for Robot: ShadowHandAsset Channel ID: 1
+```
+
+This is expected. It means CDR frames are being published but no Foxglove client
+is currently subscribed.
+
+The default Shadow Hand Foxglove WebSocket address is:
+
+```text
+ws://127.0.0.1:8766
+```
+
+In Foxglove, connect to that WebSocket and inspect:
+
+```text
+/hakoniwa/ShadowHandAsset/joint_states
+```
+
+Raw Messages should decode joint names and positions. Plot can display changing
+entries from `position[]`.
+
+### Shadow Hand 3D View in Foxglove
+
+Foxglove Raw Messages and Plot only need the `sensor_msgs/msg/JointState` topic.
+To show the hand in the Foxglove 3D panel, also provide a URDF whose joint names
+match the published `JointState.name[]` entries.
+
+The recommended local visualization path is to keep any original Shadow Hand
+URDF/xacro and its generated Foxglove artifacts under `work/`. Do not commit
+those files. Some upstream Shadow Hand URDF sources are GPL-derived; treat them
+as local operator inputs only, not as redistributable repository content.
+
+Recommended local layout:
+
+```text
+work/shadow_hand_source_urdf/     # optional upstream URDF/xacro/mesh inputs; gitignored
+work/urdf/shadow_hand/            # Foxglove-ready generated URDF and assets; gitignored
+```
+
+If `sr_common/sr_description` has been placed under
+`work/shadow_hand_source_urdf`, prepare the Foxglove-ready URDF:
+
+```bash
+python3 tools/prepare_shadow_hand_original_urdf.py
+```
+
+Serve the selected local URDF and mesh files with CORS enabled:
+
+```bash
+python3 tools/serve_static_cors.py \
+  --directory work/urdf/shadow_hand \
+  --port 8767
+```
+
+Then set the Foxglove URDF URL to the generated local file, for example:
+
+```text
+http://127.0.0.1:8767/shadow_hand_original.urdf
+```
+
+This local-prepared URDF uses the original Shadow Hand joint names and rewrites
+mesh URLs to the local HTTP server. The expected JointState topic is:
+
+```text
+/hakoniwa/ShadowHandAsset/joint_states
+```
+
+If you need a repository-owned fallback without GPL-derived URDF inputs, an
+experimental MJCF-derived URDF generator is available. Use a Python environment
+that can import `mujoco`; this is the same Python 3.12 environment used by the
+Shadow Hand demo on macOS:
+
+```bash
+python3.12 tools/mjcf_shadow_hand_to_urdf.py
+```
+
+This writes gitignored local artifacts under:
+
+```text
+work/urdf/shadow_hand/shadow_hand_right.urdf
+work/urdf/shadow_hand/assets/*.compiled.obj
+```
+
+The generated URDF includes the 24 observed Shadow Hand joints published by
+`/hakoniwa/ShadowHandAsset/joint_states`. It is a visualization contract for
+Foxglove, not a new physics model. MuJoCo remains the source of dynamics,
+actuators, and tendon coupling.
+
+For this model, do not point Foxglove directly at the original OBJ assets.
+MuJoCo recenters and reorients mesh assets during compilation, then stores the
+body-local visual placement in the compiled model. The generator therefore reads
+MuJoCo's compiled `mjModel` and exports body-local `*.compiled.obj` files whose
+vertices already include the visual geom pose. This avoids relying on a
+lossy MJCF-to-URDF reverse conversion for visual mesh placement.
+
+This MJCF-derived path is useful for debugging and license-clean fallback
+experiments, but it may not render Shadow Hand as accurately as an original
+URDF/xacro-based local visualization artifact.
+
+The long-running browser launch config starts this server automatically after
+the conductor-owning Shadow Hand asset:
+
+```bash
+PYTHONPATH=../hakoniwa-mujoco-robots/thirdparty/hakoniwa-core-pro/launcher \
+python3.12 -m hako_launch.hako_launcher \
+  launch/shadow-hand-foxglove-browser.launch.json
+```
+
+In Foxglove:
+
+1. Connect to `ws://127.0.0.1:8766`.
+2. Add a **3D** panel.
+3. Set the 3D panel display frame to `map` or `world`. The bridge publishes
+   `/tf` as an identity `map -> world` transform so the panel has a fixed frame.
+4. Add a **URDF** custom layer.
+5. Set the URDF source to URL:
+
+   ```text
+   http://127.0.0.1:8767/shadow_hand_original.urdf
+   ```
+
+6. Set the URDF control mode to joint states, then set the joint state control
+   topic to:
+
+   ```text
+   /hakoniwa/ShadowHandAsset/joint_states
+   ```
+
+7. Confirm the hand mesh appears and the fingers move with the sender. If the
+   URDF link list shows missing-link warnings while the topic data is visible,
+   first check that the URDF layer is not in transform-control mode.
+
 ## Docker Live Smoke
 
 The Docker setup builds the project in an Ubuntu container, runs CTest, and

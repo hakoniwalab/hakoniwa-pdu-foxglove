@@ -1,0 +1,120 @@
+{
+  "version": "0.1",
+  "defaults": {
+    "stdout": "logs/${asset}.out",
+    "stderr": "logs/${asset}.err",
+    "env": {
+      "prepend": {
+        "lib_path": [
+          "/usr/local/hakoniwa/lib"
+        ],
+        "PATH": [
+          "${ENV:HOME}/.pyenv/shims",
+          "/usr/local/hakoniwa/bin"
+        ]
+      }
+    },
+    "start_grace_sec": 1,
+    "delay_sec": 1
+  },
+  "assets": [
+    {
+      "name": "shadow_hand",
+      "command": "./src/cmake-build/examples/actuators/shadow_hand/shadow-hand-hakoniwa-asset",
+      "args": [
+        "--no-viewer"
+      ],
+      "cwd": "../../hakoniwa-mujoco-robots",
+      "delay_sec": 2
+    },
+    {
+      "name": "shadow_hand_urdf_server",
+      "command": "python3.12",
+      "args": [
+        "tools/serve_static_cors.py",
+        "--directory",
+        "work/urdf/shadow_hand",
+        "--port",
+        "8767"
+      ],
+      "cwd": "..",
+      "depends_on": [
+        "shadow_hand"
+      ]
+    },
+    {
+      "name": "foxglove_jointstate_publisher",
+      "command": "python3.12",
+      "args": [
+        "examples/shadow-hand-jointstate-to-foxglove/shadow_hand_jointstate_to_foxglove.py",
+        "--samples",
+        "0"
+      ],
+      "cwd": "..",
+      "env": {
+        "set": {
+          "HAKO_PDU_ENDPOINT_SHARED_LIB": "hakoniwa-pdu-endpoint/build-shared/src/libhakoniwa_pdu_endpoint.dylib",
+          "HAKO_PDU_ENDPOINT_PYTHON_BUILD_DIR": "hakoniwa-pdu-endpoint/build-shared/python"
+        },
+        "prepend": {
+          "lib_path": [
+            "/usr/local/hakoniwa/lib"
+          ],
+          "PATH": [
+            "${ENV:HOME}/.pyenv/shims",
+            "/usr/local/hakoniwa/bin"
+          ],
+          "PYTHONPATH": [
+            "hakoniwa-pdu-endpoint/python",
+            "hakoniwa-pdu-registry/pdu"
+          ]
+        }
+      },
+      "depends_on": [
+        "shadow_hand",
+        "shadow_hand_urdf_server"
+      ]
+    },
+    {
+      "name": "shadow_hand_bridge",
+      "command": "./build/hakoniwa-pdu-web-bridge",
+      "args": [
+        "--config-root",
+        "../hakoniwa-pdu-foxglove/config/shadow_hand_bridge",
+        "--asset-name",
+        "ShadowHandBridge",
+        "--node-name",
+        "shadow_hand_foxglove_bridge_node1",
+        "--delta-time-step-usec",
+        "20000"
+      ],
+      "cwd": "../../hakoniwa-pdu-bridge-core",
+      "depends_on": [
+        "shadow_hand",
+        "foxglove_jointstate_publisher"
+      ],
+      "delay_sec": 2
+    },
+    {
+      "name": "shadow_hand_sender",
+      "command": "python3.12",
+      "args": [
+        "examples/actuators/shadow_hand/send_shadow_hand_targets.py",
+        "--duration-sec",
+        "120",
+        "--frequency-hz",
+        "0.25"
+      ],
+      "cwd": "../../hakoniwa-mujoco-robots",
+      "env": {
+        "set": {
+          "HAKO_PDU_ENDPOINT_SHARED_LIB": "../hakoniwa-pdu-foxglove/hakoniwa-pdu-endpoint/build-shared/src/libhakoniwa_pdu_endpoint.dylib"
+        }
+      },
+      "depends_on": [
+        "shadow_hand_bridge"
+      ],
+      "delay_sec": 5
+    }
+  ]
+}

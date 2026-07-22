@@ -71,6 +71,13 @@ if(HAKO_PDU_FOXGLOVE_BUILD_EXAMPLES)
       hakoniwa_pdu_foxglove
       ${HAKO_FASTCDR_TARGET}
   )
+
+  add_executable(cdr_stdin_publisher examples/cdr-stdin-publisher/main.cpp)
+  target_link_libraries(cdr_stdin_publisher
+    PRIVATE
+      hakoniwa_pdu_foxglove
+      ${HAKO_FASTCDR_TARGET}
+  )
 endif()
 
 include(CTest)

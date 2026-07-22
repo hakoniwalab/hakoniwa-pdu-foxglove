@@ -1,0 +1,19 @@
+[
+  {
+    "nodeId": "shadow_hand_foxglove_bridge_node1",
+    "endpoints": [
+      {
+        "id": "shadow-hand-shm-ep",
+        "mode": "local",
+        "config_path": "shadow-hand-shm.json",
+        "direction": "in"
+      },
+      {
+        "id": "shadow-hand-tcp-ep",
+        "mode": "local",
+        "config_path": "shadow-hand-tcp-client.json",
+        "direction": "out"
+      }
+    ]
+  }
+]

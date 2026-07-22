@@ -79,3 +79,7 @@ Testing/
 .cache/
 _deps/
 third_party/foxglove-sdk/
+
+# Local recipe work area
+work/
+logs/
