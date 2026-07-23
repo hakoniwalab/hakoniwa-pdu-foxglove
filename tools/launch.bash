@@ -19,7 +19,6 @@ if [ "$OS_TYPE" == "Darwin" ]; then
 else
     export HAKO_PDU_ENDPOINT_SHARED_LIB="$(pwd)/hakoniwa-pdu-endpoint/build-shared/src/libhakoniwa_pdu_endpoint.so"
 fi
-export HAKO_PDU_ENDPOINT_PYTHON_BUILD_DIR="$(pwd)hakoniwa-pdu-endpoint/build-shared/python"
-
+export PYTHON_CMD="${PYTHON_CMD:-python3}"
 python -m hakoniwa_pdu.apps.launcher.hako_launcher "$LAUNCH_FILE"
 

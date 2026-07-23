@@ -9,11 +9,7 @@
           "${ENV:HAKONIWA_LIBPATH}"
         ],
         "PATH": [
-          "${ENV:HOME}/.pyenv/shims",
           "${ENV:HAKONIWA_BINPATH}"
-        ],
-        "PYTHONPATH": [
-          "${ENV:HAKO_PDU_ENDPOINT_PYTHON_BUILD_DIR}"
         ]
       }
     },
@@ -31,46 +27,9 @@
       "delay_sec": 2
     },
     {
-      "name": "shadow_hand_bridge",
-      "activation_timing": "before_start",
-      "command": "./build/hakoniwa-pdu-web-bridge",
-      "args": [
-        "--config-root",
-        "../hakoniwa-pdu-foxglove/config/shadow_hand_bridge",
-        "--asset-name",
-        "ShadowHandBridge",
-        "--node-name",
-        "shadow_hand_foxglove_bridge_node1",
-        "--delta-time-step-usec",
-        "20000"
-      ],
-      "cwd": "${BRIDGE_DIRPATH}",
-      "depends_on": [
-        "shadow_hand"
-      ],
-      "delay_sec": 1
-    },
-    {
-      "name": "shadow_hand_sender",
-      "activation_timing": "before_start",
-      "command": "python3.12",
-      "args": [
-        "examples/actuators/shadow_hand/send_shadow_hand_targets.py",
-        "--duration-sec",
-        "120",
-        "--frequency-hz",
-        "0.25"
-      ],
-      "cwd": "${MUJOCO_DIRPATH}",
-      "depends_on": [
-        "shadow_hand_bridge"
-      ],
-      "delay_sec": 1
-    },
-    {
       "name": "shadow_hand_urdf_server",
       "activation_timing": "before_start",
-      "command": "python3.12",
+      "command": "${PYTHON_CMD}",
       "args": [
         "tools/serve_static_cors.py",
         "--directory",
@@ -86,7 +45,7 @@
     {
       "name": "foxglove_jointstate_publisher",
       "activation_timing": "before_start",
-      "command": "python3.12",
+      "command": "${PYTHON_CMD}",
       "args": [
         "examples/shadow-hand-jointstate-to-foxglove/shadow_hand_jointstate_to_foxglove.py",
         "--samples",
@@ -96,6 +55,44 @@
       "depends_on": [
         "shadow_hand_urdf_server"
       ]
-    }    
+    },    
+    {
+      "name": "shadow_hand_bridge",
+      "activation_timing": "before_start",
+      "command": "./build/hakoniwa-pdu-web-bridge",
+      "args": [
+        "--config-root",
+        "../hakoniwa-pdu-foxglove/config/shadow_hand_bridge",
+        "--asset-name",
+        "ShadowHandBridge",
+        "--node-name",
+        "shadow_hand_foxglove_bridge_node1",
+        "--delta-time-step-usec",
+        "20000"
+      ],
+      "cwd": "${BRIDGE_DIRPATH}",
+      "depends_on": [
+        "shadow_hand",
+        "foxglove_jointstate_publisher"
+        ],
+      "delay_sec": 1
+    },
+    {
+      "name": "shadow_hand_sender",
+      "activation_timing": "before_start",
+      "command": "${PYTHON_CMD}",
+      "args": [
+        "examples/actuators/shadow_hand/send_shadow_hand_targets.py",
+        "--duration-sec",
+        "120",
+        "--frequency-hz",
+        "0.25"
+      ],
+      "cwd": "${MUJOCO_DIRPATH}",
+      "depends_on": [
+        "shadow_hand_bridge"
+      ],
+      "delay_sec": 1
+    }
   ]
 }
