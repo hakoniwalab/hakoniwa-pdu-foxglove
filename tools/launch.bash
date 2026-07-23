@@ -9,16 +9,20 @@ LAUNCH_FILE=$1
 
 export HAKONIWA_LIBPATH=/usr/local/hakoniwa/lib
 export HAKONIWA_BINPATH=/usr/local/hakoniwa/bin
-export FOXGLOVE_DIRPATH="$(pwd)"
-export MUJOCO_DIRPATH="$(pwd)/../hakoniwa-mujoco-robots"
-export BRIDGE_DIRPATH="$(pwd)/../hakoniwa-pdu-bridge-core"
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd -P)"
+export FOXGLOVE_DIRPATH="$(cd "${SCRIPT_DIR}/.." && pwd -P)"
+
+export WORKSPACE_DIR="$(dirname "${FOXGLOVE_DIRPATH}")"
+export MUJOCO_DIRPATH="${WORKSPACE_DIR}/hakoniwa-mujoco-robots"
+export BRIDGE_DIRPATH="${WORKSPACE_DIR}/hakoniwa-pdu-bridge-core"
 
 OS_TYPE=$(uname)
 if [ "$OS_TYPE" == "Darwin" ]; then
-    export HAKO_PDU_ENDPOINT_SHARED_LIB="$(pwd)/hakoniwa-pdu-endpoint/build-shared/src/libhakoniwa_pdu_endpoint.dylib"
+    export HAKO_PDU_ENDPOINT_SHARED_LIB="${FOXGLOVE_DIRPATH}/hakoniwa-pdu-endpoint/build-shared/src/libhakoniwa_pdu_endpoint.dylib"
 else
-    export HAKO_PDU_ENDPOINT_SHARED_LIB="$(pwd)/hakoniwa-pdu-endpoint/build-shared/src/libhakoniwa_pdu_endpoint.so"
+    export HAKO_PDU_ENDPOINT_SHARED_LIB="${FOXGLOVE_DIRPATH}/hakoniwa-pdu-endpoint/build-shared/src/libhakoniwa_pdu_endpoint.so"
 fi
 export PYTHON_CMD="${PYTHON_CMD:-python3}"
-python -m hakoniwa_pdu.apps.launcher.hako_launcher "$LAUNCH_FILE"
+"$PYTHON_CMD" -m hakoniwa_pdu.apps.launcher.hako_launcher "$LAUNCH_FILE"
 
