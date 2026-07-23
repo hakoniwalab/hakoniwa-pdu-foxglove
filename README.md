@@ -451,7 +451,26 @@ work/
             └── meshes/
 ```
 
-#### 1. Prepare the Shadow Robot source tree
+#### 1. Fetch the Shadow Robot visualization model
+
+The Foxglove visualization model uses the upstream Shadow Robot
+`sr_hand.urdf.xacro`:
+
+- [Shadow Robot `sr_hand.urdf.xacro`](https://github.com/shadow-robot/sr_common/blob/noetic-devel/sr_description/robots/sr_hand.urdf.xacro)
+
+Clone the upstream repository into the local `work/` directory:
+
+```bash
+mkdir -p work/shadow_hand_source_urdf
+
+git clone \
+  --depth 1 \
+  --branch noetic-devel \
+  https://github.com/shadow-robot/sr_common.git \
+  work/shadow_hand_source_urdf/sr_common
+```
+
+#### 2. Prepare the Shadow Robot source tree
 
 Place the upstream `sr_common/sr_description` tree under:
 
@@ -469,7 +488,7 @@ cp -R \
   work/urdf/shadow_hand/sr_description
 ```
 
-#### 2. Expand xacro without ROS
+#### 3. Expand xacro without ROS
 
 Use `hakoniwa-mbody-registry/tools/xacro2urdf.py`.
 
@@ -490,7 +509,7 @@ python3 ../hakoniwa-mbody-registry/tools/xacro2urdf.py \
 
 This step deliberately leaves generated `package://...` mesh URIs unchanged.
 
-#### 3. Prepare the URDF for Foxglove
+#### 4. Prepare the URDF for Foxglove
 
 Foxglove does not resolve ROS `package://` mesh URIs. Rewrite the selected
 package URI to a relative path and align the root orientation with the
@@ -520,7 +539,7 @@ sr_description/meshes/components/forearm/forearm_E3M5.dae
 The root-pose adjustment is visualization-side alignment only. It does not
 modify MuJoCo dynamics or the published JointState values.
 
-#### 4. Serve the URDF and meshes
+#### 5. Serve the URDF and meshes
 
 Serve the prepared URDF and the copied `sr_description` assets with CORS
 enabled:
@@ -537,7 +556,7 @@ The URDF URL is:
 http://127.0.0.1:8767/shadow_hand_right.urdf
 ```
 
-#### 5. Configure Foxglove
+#### 6. Configure Foxglove
 
 Connect Foxglove to:
 
