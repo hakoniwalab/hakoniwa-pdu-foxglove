@@ -9,3 +9,14 @@ Testing/
 *.dSYM/
 .DS_Store
 
+# Repository metadata and editor state
+.git/
+.idea/
+.vscode/
+
+# Local recipe inputs, generated artifacts, and logs
+work/
+logs/
+
+# Locally downloaded SDK artifacts
+third_party/foxglove-sdk/
