@@ -17,7 +17,6 @@ from hakoniwa_pdu_endpoint.c_endpoint import Endpoint, EndpointError, PduKey
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_ENDPOINT_CONFIG = REPO_ROOT / "config/shadow_hand_bridge/endpoint/shadow-hand-tcp-server.json"
-#DEFAULT_FOXGLOVE_ENDPOINT_CONFIG = REPO_ROOT / "config/shadow_hand/endpoint_foxglove_jointstate_tf.json"
 DEFAULT_FOXGLOVE_ENDPOINT_CONFIG = REPO_ROOT / "config/shadow_hand/endpoint_foxglove_jointstate.json"
 DEFAULT_PUBLISHER = REPO_ROOT / "build/cdr_stdin_publisher"
 
@@ -46,15 +45,12 @@ def write_frame(pipe, payload: bytes) -> None:
     pipe.flush()
 
 
-
-
 def compact_joint_state(joint_state) -> str:
     parts: list[str] = []
     for index, name in enumerate(joint_state.name[:5]):
         position = joint_state.position[index] if index < len(joint_state.position) else 0.0
         parts.append(f"{name}={position:.3f}")
     return " ".join(parts)
-
 
 
 def main() -> int:
