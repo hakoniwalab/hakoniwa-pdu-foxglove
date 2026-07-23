@@ -1,49 +1,67 @@
 # hakoniwa-pdu-foxglove
 
-`hakoniwa-pdu-foxglove` provides a Foxglove output adapter for
-[`hakoniwa-pdu-endpoint`](https://github.com/hakoniwalab/hakoniwa-pdu-endpoint).
+`hakoniwa-pdu-foxglove` is an output adapter that connects
+[`hakoniwa-pdu-endpoint`](https://github.com/hakoniwalab/hakoniwa-pdu-endpoint)
+to Foxglove live visualization.
 
-The initial implementation streams **caller-provided CDR payloads** to Foxglove
-through the official Foxglove SDK WebSocket server. The CDR bytes are forwarded
-without deserialization or re-serialization.
+Version 0.1 publishes **caller-provided, Foxglove-compatible CDR payloads**
+through the official Foxglove SDK WebSocket server. The adapter forwards the
+CDR bytes without deserializing or re-serializing them.
 
-> Status: version 0.1 initial implementation.
+> Status: version 0.1, output-only.
+
+## Verified scope
+
+The core adapter and the Shadow Hand example have different verification scopes.
+
+| Scope | macOS arm64 | Ubuntu 24.04 Docker |
+|---|---:|---:|
+| CMake build and automated tests | verified | verified |
+| `SimTime` CDR publisher smoke | verified | verified |
+| Foxglove WebSocket / decoded `SimTime` | verified | not recorded as full UI verification |
+| Shadow Hand JointState live path | verified | not yet verified |
+| Shadow Hand URDF + JointState 3D visualization | verified | not yet verified |
+
+The **full Shadow Hand end-to-end workflow is currently reproduced and verified
+only on macOS arm64**. The Linux/Docker checks in this repository cover the core
+adapter build/tests and the `SimTime` CDR smoke path; they should not be read as
+Linux verification of the full Shadow Hand workflow.
 
 ## Goal
 
 Provide a small, reusable component that connects Hakoniwa's binary-oriented
-Endpoint abstraction to Foxglove live visualization.
+Endpoint abstraction to Foxglove while keeping type conversion outside the
+transport adapter.
 
-The first release should:
+Version 0.1:
 
-- implement an output-only `FoxgloveComm` adapter derived from
+- implements an output-only `FoxgloveComm` derived from
   `hakoniwa::pdu::PduComm`;
-- use the official Foxglove C++ SDK and its `WebSocketServer` and `RawChannel`
-  APIs;
-- publish CDR payloads with an explicitly configured schema;
-- preserve the payload bytes exactly as supplied by the caller;
-- use `hakoniwa-pdu-registry` as the authoritative source for PDU types, CDR
-  codecs, and schema assets;
-- remain independent from the `hakoniwa-pdu-endpoint` factory in the first
-  implementation by using `Endpoint::set_comm()`.
+- uses the official Foxglove C++ SDK `WebSocketServer` and `RawChannel` APIs;
+- publishes CDR payloads with explicitly configured schemas;
+- preserves the exact payload bytes supplied by the caller;
+- uses `hakoniwa-pdu-registry` as the source of PDU types, CDR codecs, and schema
+  information;
+- is injected with `Endpoint::set_comm()` rather than being registered in the
+  Endpoint protocol factory.
 
 ## Important data contract
 
-`PduComm` is a binary transport boundary. It does not guarantee that the bytes
+`PduComm` is a binary transport boundary. It does not guarantee that bytes
 passed to `send()` are CDR.
 
-Therefore, this repository defines the following contract:
+This repository therefore defines the following contract:
 
 ```text
 FoxgloveComm::send(...) input = complete Foxglove-compatible CDR payload
 ```
 
 The caller, typed wrapper, or bridge layer is responsible for converting a
-Hakoniwa typed/raw PDU into CDR before calling the Endpoint. Generated CDR
+Hakoniwa typed/native PDU into CDR before calling the Endpoint. Generated CDR
 converters from `hakoniwa-pdu-registry` should be used for that conversion.
 
-`FoxgloveComm` must not guess the input representation and must not silently
-convert Hakoniwa's native PDU binary format.
+`FoxgloveComm` does not guess the input representation and does not silently
+convert Hakoniwa native PDU binary into CDR.
 
 ## Architecture
 
@@ -65,7 +83,7 @@ flowchart LR
     SDK -->|Foxglove WebSocket| UI
 ```
 
-The design is intentionally split into two layers:
+The implementation is split into two layers:
 
 1. **`FoxglovePublisher`** owns Foxglove SDK objects, server lifecycle, channel
    registration, and raw message publication.
@@ -73,140 +91,48 @@ The design is intentionally split into two layers:
    `FoxglovePublisher`, resolves PDU keys, and translates errors into
    `HakoPduErrorType`.
 
-This keeps the Foxglove-specific core reusable without coupling all behavior to
-Endpoint lifecycle details.
+The type-specific conversion step remains outside both layers.
 
-## Initial scope
+## Version 0.1 scope
 
-Version 0.1 is deliberately narrow.
-
-### Included
+Included:
 
 - C++20 and CMake build
 - official Foxglove C++ SDK integration
-- one local WebSocket server
-- configurable host, port, and server name
+- configurable WebSocket host, port, and server name
 - output-only publication
 - one Foxglove `RawChannel` per configured Hakoniwa PDU mapping
 - message encoding fixed to `cdr`
 - explicit schema name, schema encoding, and schema file
-- schema encodings supported by configuration:
-  - `omgidl` for OMG IDL schema data
-  - `ros2msg` or `ros2idl` when the selected registry artifact requires the
-    corresponding ROS 2 schema representation
-- wall-clock log time for the first implementation
-- unit tests that do not require the Foxglove application
-- a manual live-visualization smoke example
+- `omgidl`, `ros2msg`, and `ros2idl` schema configuration
+- wall-clock log time
+- automated tests that do not require Foxglove
+- basic CDR publisher and generic stdin CDR publisher examples
+- a verified macOS Shadow Hand JointState / URDF 3D workflow
 
-### Not included
+Not included:
 
-- Foxglove UI, panels, or extensions
-- conversion to Foxglove native message types such as `PoseInFrame`
-- automatic conversion from Hakoniwa native PDU binary to CDR
+- automatic Hakoniwa native PDU to CDR conversion inside `FoxgloveComm`
 - Foxglove-to-Hakoniwa client publishing
-- services, parameters, assets, or connection graph capabilities
-- simulation-time broadcasting
+- Foxglove services, parameters, assets, or connection graph capabilities
+- Hakoniwa simulation-time broadcasting through Foxglove
 - MCAP recording
 - dynamic channel creation after startup
-- modification of the `hakoniwa-pdu-endpoint` protocol factory
+- Endpoint protocol-factory registration
 
-These may be added only after the raw CDR publication path is validated.
-
-## Endpoint lifecycle mapping
-
-The first implementation should follow the existing `PduComm` lifecycle.
+## Endpoint lifecycle
 
 | `PduComm` method | Foxglove behavior |
 |---|---|
-| `set_pdu_definition()` | Receive the PDU definition used to resolve `(robot, pdu)` into `(robot, channel_id)` |
-| `open(config_path)` | Parse and validate configuration, resolve PDU mappings, and load schema files; no network side effects |
-| `start()` | Create the Foxglove context, WebSocket server, and raw channels, then enter the running state |
-| `send(key, data)` | Find the configured channel and log the supplied CDR bytes without modification |
-| `recv(...)` | Return `HAKO_PDU_ERR_UNSUPPORTED` |
-| `recv_next(...)` | Return `HAKO_PDU_ERR_UNSUPPORTED` |
-| `stop()` | Stop publication, close channels, and stop the WebSocket server |
-| `close()` | Idempotently stop and release all resources and loaded configuration |
-| `is_running()` | Report the adapter lifecycle state |
-
-`open()`, `start()`, `stop()`, and `close()` must have explicit and testable
-state transitions. Calling `stop()` or `close()` more than once must be safe.
-
-## Configuration outline
-
-The implemented communication config schema is:
-
-```json
-{
-  "protocol": "foxglove",
-  "server": {
-    "name": "hakoniwa-pdu-foxglove",
-    "host": "127.0.0.1",
-    "port": 8765
-  },
-  "channels": [
-    {
-      "pdu_key": {
-        "robot": "FoxgloveDemo",
-        "pdu": "sim_time"
-      },
-      "topic": "/hakoniwa/FoxgloveDemo/sim_time",
-      "schema": {
-        "name": "hako_msgs/msg/SimTime",
-        "encoding": "ros2msg",
-        "file": "../../hakoniwa-pdu-registry/idl/hako_msgs/msg/SimTime.msg"
-      }
-    }
-  ]
-}
-```
-
-Rules:
-
-- paths are resolved relative to the Foxglove communication config file;
-- `message_encoding` is fixed to `cdr` for version 0.1;
-- the schema encoding is explicit and must match the schema file contents;
-- no implicit fallback between `omgidl`, `ros2msg`, and `ros2idl` is allowed;
-- duplicate topics, duplicate PDU keys, unresolved PDU definitions, missing
-  schema files, unsupported schema encodings, and invalid ports are
-  configuration errors;
-- the topic name should be configurable rather than derived invisibly;
-- the implementation should retain schema bytes for at least as long as the
-  corresponding Foxglove channel exists.
-
-## Expected repository layout
-
-```text
-hakoniwa-pdu-foxglove/
-├── README.md
-├── task.md
-├── CMakeLists.txt
-├── build.bash
-├── cmake/
-│   └── FoxgloveSdk.cmake
-├── include/
-│   └── hakoniwa/pdu/foxglove/
-│       ├── foxglove_publisher.hpp
-│       └── comm_foxglove.hpp
-├── src/
-│   ├── foxglove_publisher.cpp
-│   └── comm_foxglove.cpp
-├── config/
-│   └── sample/
-│       ├── endpoint_foxglove.json
-│       └── comm_foxglove.json
-├── examples/
-│   └── cdr-publisher/
-│       └── main.cpp
-├── test/
-│   ├── test_config.cpp
-│   ├── test_comm_foxglove.cpp
-│   └── test_publisher.cpp
-├── hakoniwa-pdu-endpoint/
-└── hakoniwa-pdu-registry/
-```
-
-The final layout may vary slightly, but the separation between the generic
-Foxglove publisher and the Endpoint communication adapter must remain clear.
+| `set_pdu_definition()` | Receives the PDU definition used to resolve `(robot, pdu)` into `(robot, channel_id)` |
+| `open(config_path)` | Parses configuration, resolves PDU mappings, and loads schema files |
+| `start()` | Creates the Foxglove context, WebSocket server, and raw channels |
+| `send(key, data)` | Publishes the supplied CDR bytes without modification |
+| `recv(...)` | Returns `HAKO_PDU_ERR_UNSUPPORTED` |
+| `recv_next(...)` | Returns `HAKO_PDU_ERR_UNSUPPORTED` |
+| `stop()` | Stops publication and the WebSocket server |
+| `close()` | Idempotently releases runtime resources and loaded configuration |
+| `is_running()` | Reports adapter lifecycle state |
 
 ## Dependencies
 
@@ -214,19 +140,13 @@ Foxglove publisher and the Endpoint communication adapter must remain clear.
 - CMake 3.20 or later
 - `hakoniwa-pdu-endpoint` submodule
 - `hakoniwa-pdu-registry` submodule
-- official Foxglove C++ SDK, pinned to a specific release and checksum
+- official Foxglove C++ SDK, pinned by version and SHA256
+- Fast-CDR for the bundled examples
 - GoogleTest for tests
-- `nlohmann_json` through the existing Endpoint dependency or an explicit CMake
-  dependency
 
-The Foxglove SDK is available under the MIT license and provides C++, Python,
-and Rust bindings. Its C++ release archive includes a CMake package config and
-prebuilt C library. Follow the official installation guidance rather than
-building the SDK's Rust core as part of this project.
+## Build and test
 
-## Build and Test
-
-Initialize submodules first:
+Initialize submodules:
 
 ```bash
 git submodule update --init --recursive
@@ -244,206 +164,260 @@ Run tests:
 ./test.bash
 ```
 
-The build creates:
+The build produces:
 
 - `hakoniwa_pdu_foxglove`
 - `cdr_publisher_example`
+- `cdr_stdin_publisher`
 - `hakoniwa_pdu_foxglove_tests`
 
-## Foxglove SDK Pin
+## Foxglove SDK pin
 
-The CMake integration uses the official Foxglove C++ SDK release archive and
-its package config from `foxglove/foxglove-sdk`.
+The CMake integration downloads an official Foxglove C++ SDK release archive
+and verifies it with SHA256.
 
-- SDK release: `sdk/v0.25.2`
-- macOS arm64 archive:
-  `foxglove-v0.25.2-cpp-aarch64-apple-darwin.zip`
-  - SHA256:
-    `8839bde7c4e1142e7cbbf57756d87d2e36a683fad6fb32cbc240038d6e781ad8`
-- macOS x86_64 archive:
-  `foxglove-v0.25.2-cpp-x86_64-apple-darwin.zip`
-  - SHA256:
-    `3ef620496dde842bc35201f87c33cf94e3b3b2b5b5fb8f057ad64bcf0b12238b`
-- Linux aarch64 archive:
-  `foxglove-v0.25.2-cpp-aarch64-unknown-linux-gnu.zip`
-  - SHA256:
-    `72d403cc2ee90e84bd803c08e7dcaa2ddf5175d381f9668b595357a9445c39b6`
-- Linux x86_64 archive:
-  `foxglove-v0.25.2-cpp-x86_64-unknown-linux-gnu.zip`
-  - SHA256:
-    `ac001974aa0e3ac5b8159bcd698007c0661715c4a0201c99353e8a8dfe03bd44`
+Pinned release:
 
-CMake selects the archive from `CMAKE_SYSTEM_NAME` and
-`CMAKE_SYSTEM_PROCESSOR`. Set `HAKO_PDU_FOXGLOVE_USE_SYSTEM_FOXGLOVE_SDK=ON`
-to use an already installed `foxglove-sdk` package instead.
+```text
+sdk/v0.25.2
+```
 
-## CDR Publisher Example
+Supported prebuilt targets in the current CMake integration:
 
-The sample publishes `hako_msgs/SimTime`:
+- macOS arm64
+- macOS x86_64
+- Linux aarch64
+- Linux x86_64
 
-- smoke-test PDU type: `hako_msgs/SimTime`
-- PDU definition: `config/sample/pdudef.json` and
-  `config/sample/pdutypes.json`
-- registry schema artifact:
+Set:
+
+```text
+HAKO_PDU_FOXGLOVE_USE_SYSTEM_FOXGLOVE_SDK=ON
+```
+
+to use an already installed `foxglove-sdk` CMake package.
+
+See `cmake/FoxgloveSdk.cmake` for the exact archive names and checksums.
+
+## Basic `SimTime` CDR publisher
+
+The smallest smoke example publishes `hako_msgs/SimTime`.
+
+- PDU definition: `config/sample/pdudef.json`
+- Foxglove communication config: `config/sample/comm_foxglove.json`
+- registry schema:
   `hakoniwa-pdu-registry/idl/hako_msgs/msg/SimTime.msg`
-- Foxglove schema encoding: `ros2msg`
-- generated registry CDR converter:
+- schema encoding: `ros2msg`
+- generated CDR converter:
   `hakoniwa-pdu-registry/pdu/types/hako_msgs/pdu_cpptype_cdr_conv_SimTime.hpp`
-- payload: complete DDS CDR payload, including CDR encapsulation
 - topic: `/hakoniwa/FoxgloveDemo/sim_time`
 
-Run from the repository root:
+Run:
 
 ```bash
 ./build/cdr_publisher_example config/sample/endpoint_foxglove.json
 ```
 
-The example constructs `FoxgloveComm`, injects it with `Endpoint::set_comm()`,
-uses the generated `SimTimeCdr` converter, and publishes a changing
-`time_usec` value. Press `Ctrl-C` to stop.
-
-For a short smoke run:
+For a short smoke:
 
 ```bash
 ./build/cdr_publisher_example config/sample/endpoint_foxglove.json 3
 ```
 
-The default sample WebSocket address is:
+Connect Foxglove to:
 
 ```text
 ws://127.0.0.1:8765
 ```
 
-If that port is already in use, edit `config/sample/comm_foxglove.json` and
-change `server.port`, then run the example again.
+Then confirm `/hakoniwa/FoxgloveDemo/sim_time` in Raw Messages or Plot.
 
-In Foxglove:
+## Generic stdin CDR publisher
 
-1. Open Foxglove.
-2. Choose **Open connection**.
-3. Connect to the printed WebSocket address.
-4. Confirm topic `/hakoniwa/FoxgloveDemo/sim_time`.
-5. In Raw Messages, confirm `time_usec` is decoded.
-6. In Plot, select `time_usec` for a numeric plot.
+`cdr_stdin_publisher` is a type-independent process boundary. A type-specific
+producer creates a complete CDR payload and writes it to stdin; the C++ process
+publishes it through a `FoxgloveComm`-backed Endpoint.
 
-## Shadow Hand Foxglove Smoke
-
-The Shadow Hand Foxglove recipe uses a two-process bridge boundary:
+Default framing:
 
 ```text
-ShadowHandAsset/joint_states
-  -> callback SHM endpoint
-  -> hakoniwa-pdu-bridge-core asset
-  -> TCP endpoint
-  -> TCP-to-CDR converter process
-  -> Foxglove publisher process
+<u32 payload_size little-endian><CDR payload>
 ```
 
-The `hakoniwa-pdu-bridge-core` executable is reused as-is. The
-Shadow-Hand-specific bridge configuration is kept in this repository:
+A multiplexed mode is also supported for configurations with multiple channels.
+See `examples/cdr-stdin-publisher/README.md` for the framing contract.
+
+## Shadow Hand Foxglove workflow
+
+The verified Shadow Hand path reuses existing Hakoniwa components rather than
+putting Hakoniwa shared-memory and type-conversion responsibility into the
+Foxglove adapter.
+
+```text
+MuJoCo Shadow Hand
+  -> Hakoniwa JointState PDU in callback SHM
+  -> hakoniwa-pdu-bridge-core
+  -> native Hakoniwa PDU over TCP
+  -> Python JointState decode
+  -> JointState CDR encode
+  -> cdr_stdin_publisher
+  -> FoxgloveComm
+  -> Foxglove WebSocket
+  -> Foxglove App
+```
+
+The current `hakoniwa-pdu-bridge-core` process boundary is an implementation
+choice, not a fundamental requirement. A future single-process implementation
+could separate Hakoniwa callback/SHM execution and Foxglove publication with
+threads and an internal queue.
+
+The Shadow-Hand-specific bridge configuration lives under:
 
 ```text
 config/shadow_hand_bridge/
 ```
 
-This keeps the bridge-core repository clean while keeping the Foxglove recipe's
-scenario configuration close to the Foxglove adapter.
+The Foxglove JointState endpoint is:
 
-The bridge TCP payload is Hakoniwa native PDU binary, not CDR. The converter
-process receives that TCP payload, decodes `sensor_msgs/JointState` with
-`hakoniwa-pdu-registry`, converts it to CDR, and forwards length-prefixed frames
-to `cdr_stdin_publisher`, which publishes them with `FoxgloveComm`.
+```text
+config/shadow_hand/endpoint_foxglove_jointstate.json
+```
 
-Run the smoke test with Hakoniwa Launcher:
+and publishes:
+
+```text
+/hakoniwa/ShadowHandAsset/joint_states
+```
+
+at:
+
+```text
+ws://127.0.0.1:8766
+```
+
+### Prepare the ROS 2 JointState schema
+
+The Shadow Hand Foxglove config references:
+
+```text
+work/schemas/ros2_jazzy/sensor_msgs/msg/JointState.bundle.msg
+```
+
+`work/` is intentionally gitignored. The schema file is a **local staging
+artifact**, not a source file owned by this repository.
+
+For the verified macOS setup, the ROS 2 schema material was prepared from the
+**ROS 2 Jazzy Docker environment provided by `hakoniwa-pdu-registry`** and then
+copied into this repository's `work/schemas/ros2_jazzy/` tree.
+
+The responsibility boundary is:
+
+```text
+hakoniwa-pdu-registry Docker / ROS 2 Jazzy
+  -> ROS message definitions and schema preparation
+  -> copy prepared JointState schema bundle
+hakoniwa-pdu-foxglove/work/schemas/ros2_jazzy/
+  -> local Foxglove schema input
+```
+
+Start the reproducible registry environment from a sibling
+`hakoniwa-pdu-registry` checkout:
+
+```bash
+cd ../hakoniwa-pdu-registry
+bash docker/pull-image.bash
+bash docker/run.bash
+```
+
+The registry Docker environment currently uses ROS 2 Jazzy and contains the ROS
+standard interface packages required by `sensor_msgs/JointState`.
+
+After preparing the schema bundle in that environment, place the result at:
+
+```text
+../hakoniwa-pdu-foxglove/work/schemas/ros2_jazzy/sensor_msgs/msg/JointState.bundle.msg
+```
+
+This repository deliberately does not vendor that local ROS schema bundle.
+Keeping schema preparation in the registry environment preserves the separation:
+
+- `hakoniwa-pdu-registry`: ROS/PDU/CDR type knowledge and reproducible ROS toolchain
+- `hakoniwa-pdu-foxglove`: Foxglove transport and visualization integration
+
+The exact bundle-generation helper is not yet standardized as a public
+`hakoniwa-pdu-registry` command. Until it is, treat this step as part of the
+verified macOS recipe rather than a fully automated cross-platform setup.
+
+### Run the Shadow Hand live path
+
+Build the Endpoint shared library and Python binding used by the bridge:
 
 ```bash
 cd hakoniwa-pdu-endpoint
 cmake -S . -B build-shared -DCMAKE_BUILD_TYPE=Release -DBUILD_SHARED_LIBS=ON
 cmake --build build-shared --parallel
 PATH=$HOME/.pyenv/shims:$PATH BUILD_DIR=build-shared bash build-python.bash
-
 cd ..
+```
+
+Run the smoke configuration with Hakoniwa Launcher:
+
+```bash
 PYTHONPATH=../hakoniwa-mujoco-robots/thirdparty/hakoniwa-core-pro/launcher \
 python3.12 -m hako_launch.hako_launcher \
   launch/shadow-hand-foxglove-smoke.launch.json
 ```
 
-Launcher starts the Shadow Hand asset first because it owns the Hakoniwa
-conductor for this demo. It then starts the Foxglove JointState publisher, the
-bridge asset, and the Python sender, and finally calls `hako-cmd start` after
-the assets have registered. This ordering is required because the bridge reads
-callback SHM as a Hakoniwa asset.
+Expected evidence includes:
 
-Expected evidence:
+- `shadow_hand` reaches `WAIT START` and starts simulation
+- the bridge initializes its SHM/TCP endpoints
+- the Python publisher reports `sent JointState CDR`
+- `cdr_stdin_publisher` reports published CDR frames
 
-- `launch/logs/shadow_hand.out` reaches `WAIT START` and then starts simulation.
-- `launch/logs/shadow_hand_bridge.out` reports the endpoint container and bridge core
-  initialization.
-- `launch/logs/foxglove_jointstate_publisher.err` prints the Foxglove WebSocket
-  address and repeated `sent JointState CDR` records.
-- `launch/logs/foxglove_jointstate_publisher.err` or the nested
-  `cdr_stdin_publisher` output prints repeated `published CDR frame` records.
+If Foxglove is not connected, a `No subscribers found` warning is expected.
 
-If Foxglove is not connected during the run, `cdr_stdin_publisher` may print:
+### Shadow Hand 3D visualization
 
-```text
-WARNING: No subscribers found for Robot: ShadowHandAsset Channel ID: 1
-```
+Foxglove Raw Messages and Plot only need the JointState topic. The 3D panel also
+needs a visual kinematic model.
 
-This is expected. It means CDR frames are being published but no Foxglove client
-is currently subscribed.
+The verified setup uses:
 
-The default Shadow Hand Foxglove WebSocket address is:
+- **physics model:** MuJoCo Menagerie Shadow Hand
+- **visualization model:** Shadow Robot `sr_hand.urdf.xacro`
+- **joint motion:** Hakoniwa `sensor_msgs/msg/JointState`
 
-```text
-ws://127.0.0.1:8766
-```
+No `/tf` publisher is required for the verified URDF + JointState control path.
 
-In Foxglove, connect to that WebSocket and inspect:
-
-```text
-/hakoniwa/ShadowHandAsset/joint_states
-```
-
-Raw Messages should decode joint names and positions. Plot can display changing
-entries from `position[]`.
-
-### Shadow Hand 3D View in Foxglove
-
-Foxglove Raw Messages and Plot only need the
-`sensor_msgs/msg/JointState` topic.
-
-For the 3D panel, use the original Shadow Robot xacro/URDF as the visualization
-model. MuJoCo remains the source of dynamics and joint state; the URDF is used
-only to define the visual kinematic model in Foxglove.
-
-The verified local flow is:
+The visual-model preparation flow is:
 
 ```text
 Shadow Robot sr_hand.urdf.xacro
   -> hakoniwa-mbody-registry/tools/xacro2urdf.py
   -> plain URDF
   -> tools/prepare_urdf.py
-       - package://PACKAGE/... -> PACKAGE/...
+       - package://PACKAGE/... -> viewer-relative path
        - root-joint orientation adjustment
   -> local HTTP server
   -> Foxglove URDF layer + Hakoniwa JointState
 ```
 
-Keep upstream Shadow Robot sources and generated visualization artifacts under
-`work/`. They are local build inputs and outputs and should not be committed to
-this repository.
+Keep upstream Shadow Robot inputs and generated visualization artifacts under
+`work/`; do not commit them.
 
 Recommended local layout:
 
 ```text
 work/
+├── schemas/
+│   └── ros2_jazzy/
+│       └── sensor_msgs/
+│           └── msg/
+│               └── JointState.bundle.msg
 ├── shadow_hand_source_urdf/
 │   └── sr_common/
 │       └── sr_description/
-│           ├── robots/
-│           │   └── sr_hand.urdf.xacro
-│           └── meshes/
 └── urdf/
     └── shadow_hand/
         ├── shadow_hand_right.urdf
@@ -451,18 +425,10 @@ work/
             └── meshes/
 ```
 
-#### 1. Fetch the Shadow Robot visualization model
-
-The Foxglove visualization model uses the upstream Shadow Robot
-`sr_hand.urdf.xacro`:
-
-- [Shadow Robot `sr_hand.urdf.xacro`](https://github.com/shadow-robot/sr_common/blob/noetic-devel/sr_description/robots/sr_hand.urdf.xacro)
-
-Clone the upstream repository into the local `work/` directory:
+#### 1. Fetch the Shadow Robot visualization source
 
 ```bash
 mkdir -p work/shadow_hand_source_urdf
-
 git clone \
   --depth 1 \
   --branch noetic-devel \
@@ -470,15 +436,7 @@ git clone \
   work/shadow_hand_source_urdf/sr_common
 ```
 
-#### 2. Prepare the Shadow Robot source tree
-
-Place the upstream `sr_common/sr_description` tree under:
-
-```text
-work/shadow_hand_source_urdf/sr_common/sr_description
-```
-
-Copy `sr_description` into the directory that will be served to Foxglove:
+#### 2. Stage the mesh tree
 
 ```bash
 mkdir -p work/urdf/shadow_hand
@@ -488,13 +446,9 @@ cp -R \
   work/urdf/shadow_hand/sr_description
 ```
 
-#### 3. Expand xacro without ROS
+#### 3. Expand xacro without a ROS runtime on the host
 
-Use `hakoniwa-mbody-registry/tools/xacro2urdf.py`.
-
-The converter supports an explicit package mapping so ROS-style
-`$(find sr_description)` references can be resolved on macOS or Linux without a
-ROS installation:
+Using a sibling `hakoniwa-mbody-registry` checkout:
 
 ```bash
 python3 ../hakoniwa-mbody-registry/tools/xacro2urdf.py \
@@ -507,13 +461,7 @@ python3 ../hakoniwa-mbody-registry/tools/xacro2urdf.py \
   --arg tip_sensors=pst
 ```
 
-This step deliberately leaves generated `package://...` mesh URIs unchanged.
-
 #### 4. Prepare the URDF for Foxglove
-
-Foxglove does not resolve ROS `package://` mesh URIs. Rewrite the selected
-package URI to a relative path and align the root orientation with the
-MuJoCo Menagerie Shadow Hand model:
 
 ```bash
 python3 tools/prepare_urdf.py \
@@ -524,25 +472,11 @@ python3 tools/prepare_urdf.py \
   --in-place
 ```
 
-For example:
-
-```text
-package://sr_description/meshes/components/forearm/forearm_E3M5.dae
-```
-
-becomes:
-
-```text
-sr_description/meshes/components/forearm/forearm_E3M5.dae
-```
-
-The root-pose adjustment is visualization-side alignment only. It does not
-modify MuJoCo dynamics or the published JointState values.
+This rewrites selected `package://` mesh URIs to relative paths and applies only
+a visualization-side root orientation adjustment. It does not modify MuJoCo
+dynamics or the published JointState.
 
 #### 5. Serve the URDF and meshes
-
-Serve the prepared URDF and the copied `sr_description` assets with CORS
-enabled:
 
 ```bash
 python3 tools/serve_static_cors.py \
@@ -550,7 +484,7 @@ python3 tools/serve_static_cors.py \
   --port 8767
 ```
 
-The URDF URL is:
+URDF URL:
 
 ```text
 http://127.0.0.1:8767/shadow_hand_right.urdf
@@ -558,7 +492,7 @@ http://127.0.0.1:8767/shadow_hand_right.urdf
 
 #### 6. Configure Foxglove
 
-Connect Foxglove to:
+Connect to:
 
 ```text
 ws://127.0.0.1:8766
@@ -568,60 +502,33 @@ Then:
 
 1. Add a **3D** panel.
 2. Add a **URDF** custom layer.
-3. Set the URDF source to:
+3. Set the URDF URL to `http://127.0.0.1:8767/shadow_hand_right.urdf`.
+4. Set URDF control mode to **Joint states**.
+5. Set the joint-state topic to
+   `/hakoniwa/ShadowHandAsset/joint_states`.
+6. Enable **Ignore COLLADA `<up_axis>`** in the 3D scene settings.
 
-   ```text
-   http://127.0.0.1:8767/shadow_hand_right.urdf
-   ```
+The COLLADA setting is required for the Shadow Robot `.dae` visual meshes to
+appear with the expected orientation.
 
-4. Set the URDF control mode to **Joint states**.
-5. Set the joint-state topic to:
+The Shadow Robot URDF joint names match the observed JointState names, allowing
+Foxglove to animate the hand directly from `JointState.position[]`.
 
-   ```text
-   /hakoniwa/ShadowHandAsset/joint_states
-   ```
+Troubleshooting:
 
-6. In the 3D panel scene settings, enable:
+- disconnected-looking mesh segments: check **Ignore COLLADA `<up_axis>`**
+- whole model rotated relative to MuJoCo: check the `rh_world_joint` root RPY
+- URDF visible but fingers do not move: confirm **Joint states** control mode and
+  the exact JointState topic
+- do not add `/tf` for this verified path; the URDF layer computes its internal
+  link poses from the URDF and JointState
 
-   ```text
-   Ignore COLLADA <up_axis>
-   ```
+The earlier MJCF-to-URDF reverse-conversion experiment is not part of the
+recommended workflow. MuJoCo Menagerie remains the physics source of truth and
+the upstream Shadow Robot URDF remains the visualization source of truth.
 
-   This is required for the Shadow Robot COLLADA (`.dae`) visual meshes to
-   appear with the same orientation expected by the ROS/RViz-oriented URDF
-   assets.
-
-No `/tf` publisher is required for this URDF + JointState visualization path.
-
-The joint names in the Shadow Robot URDF match the observed Shadow Hand joint
-names published by Hakoniwa, so Foxglove can animate the model directly from
-the `JointState.position[]` values.
-
-#### Troubleshooting
-
-If the hand is split into disconnected-looking mesh segments even when every
-joint position is zero, first check that **Ignore COLLADA `<up_axis>`** is
-enabled. This was the cause of the apparent mesh/link misalignment during the
-Shadow Hand validation.
-
-If the hand shape is correct but the whole model is rotated relative to the
-MuJoCo viewer, check the `rh_world_joint` root orientation applied by
-`prepare_urdf.py`.
-
-If the URDF loads but does not move, confirm that the URDF layer is using
-**Joint states** control mode and that the topic is exactly:
-
-```text
-/hakoniwa/ShadowHandAsset/joint_states
-```
-
-The earlier MJCF-to-URDF reverse-conversion path is not part of the recommended
-Shadow Hand Foxglove workflow. The upstream Shadow Robot xacro is the
-authoritative visualization model; MuJoCo Menagerie remains the authoritative
-physics model.
-
-The long-running browser launch config can start the static server together
-with the other smoke-test processes after the prepared URDF has been generated:
+The long-running browser launch config can start the local static server
+together with the other processes after the URDF has been prepared:
 
 ```bash
 PYTHONPATH=../hakoniwa-mujoco-robots/thirdparty/hakoniwa-core-pro/launcher \
@@ -629,203 +536,135 @@ python3.12 -m hako_launch.hako_launcher \
   launch/shadow-hand-foxglove-browser.launch.json
 ```
 
-## Docker Live Smoke
+## Docker core smoke
 
-The Docker setup builds the project in an Ubuntu container, runs CTest, and
-starts the existing CDR publisher example. Foxglove itself is not Dockerized;
-run the Foxglove desktop or web app on the host and connect to the container's
-WebSocket server.
+The Docker setup validates the core adapter on Ubuntu 24.04. It builds the
+project, runs CTest, and starts the basic `SimTime` CDR publisher.
 
-The Docker image uses the same CMake configuration as the local build, including
-the pinned Foxglove SDK release in `cmake/FoxgloveSdk.cmake`. Docker-specific
-runtime config is kept under `docker/config/` and is separate from
-`config/sample/`.
+**This Docker smoke does not validate the full Shadow Hand workflow.**
 
-Initialize submodules before building the image:
+Initialize submodules:
 
 ```bash
 git submodule update --init --recursive
 ```
 
-Build the Ubuntu image:
+Build:
 
 ```bash
 docker compose -f docker/docker-compose.yml build
 ```
 
-Run CTest inside the container:
+Run CTest:
 
 ```bash
 docker compose -f docker/docker-compose.yml run --rm --no-deps hakoniwa-pdu-foxglove \
   ctest --test-dir build --output-on-failure
 ```
 
-Start the CDR publisher:
+Start the publisher:
 
 ```bash
 docker compose -f docker/docker-compose.yml up --force-recreate hakoniwa-pdu-foxglove
 ```
 
-The container binds the Foxglove WebSocket server to `0.0.0.0:8765` and exposes
-it to the host as:
+Connect the host Foxglove application to:
 
 ```text
 ws://localhost:8765
 ```
 
-The Docker publisher topic is:
+The Docker topic is:
 
 ```text
 /hakoniwa/FoxgloveDocker/sim_time
 ```
 
-For a single command that builds, runs CTest, and then starts the publisher in
-the foreground:
+The expected decoded field is `_time_usec`.
 
-```bash
-./docker/run-smoke-test.bash
-```
-
-In Foxglove on the host:
-
-1. Open Foxglove Desktop, or open `https://app.foxglove.dev/` in a browser and
-   log in.
-2. If the first-run framework setup screen appears, choose **Go to dashboard**.
-   The ROS 1, ROS 2, PX4, and custom framework choices are not required for
-   this WebSocket smoke test.
-3. Choose **Open connection**.
-4. Select **Foxglove WebSocket**.
-5. Connect to `ws://localhost:8765`.
-6. Confirm the topic tree shows `/hakoniwa/FoxgloveDocker/sim_time`.
-7. Confirm the decoded field appears as `_time_usec` with type `uint64`.
-
-To inspect decoded CDR fields:
-
-1. Add or change a panel to **Raw Messages**.
-2. Enter this message path:
-
-   ```text
-   /hakoniwa/FoxgloveDocker/sim_time
-   ```
-
-3. Confirm `_time_usec` is decoded and increasing.
-
-To plot the numeric field:
-
-1. Add or change a panel to **Plot**.
-2. Enter this message path:
-
-   ```text
-   /hakoniwa/FoxgloveDocker/sim_time._time_usec
-   ```
-
-3. Confirm the plotted value increases over time.
-
-The 3D and Image panels do not show this sample because the Docker smoke data is
-only a `SimTime` CDR message with one numeric field.
-
-To verify reconnect behavior after a container restart:
-
-```bash
-docker compose -f docker/docker-compose.yml restart hakoniwa-pdu-foxglove
-```
-
-Then reconnect Foxglove to `ws://localhost:8765`.
-
-Stop the Docker publisher:
+Stop:
 
 ```bash
 docker compose -f docker/docker-compose.yml down
 ```
 
-## Current Verification
+## Current verification
 
-Verified on macOS arm64:
+As of 2026-07-23:
 
-```text
-./test.bash
-100% tests passed, 0 tests failed out of 1
+### macOS arm64
 
-./build/cdr_publisher_example /private/tmp/hako-foxglove-sample/endpoint_foxglove.json 3
-published time_usec=0 bytes=12
-published time_usec=100000 bytes=12
-published time_usec=200000 bytes=12
-```
+Verified:
 
-The example smoke was run with a temporary copy of the sample config using
-port `18765` because port `8765` was already unavailable in the sandboxed run.
-The sandbox blocks local bind; the WebSocket smoke was verified outside the
-sandbox. Foxglove UI visual confirmation remains a manual step.
+- core build and automated tests
+- basic `SimTime` CDR publication
+- Foxglove WebSocket connection
+- Shadow Hand JointState publication
+- Shadow Robot URDF loading
+- live URDF animation from JointState
+- MuJoCo and Foxglove visualization running together
 
-Verified with Docker on Ubuntu 24.04:
+### Ubuntu 24.04 Docker
 
-```text
-docker compose -f docker/docker-compose.yml build
-...
-100% tests passed, 0 tests failed out of 1
+Verified:
 
-docker compose -f docker/docker-compose.yml run --rm --no-deps hakoniwa-pdu-foxglove \
-  ctest --test-dir build --output-on-failure
-...
-100% tests passed, 0 tests failed out of 1
+- Docker build
+- CTest
+- basic `SimTime` CDR publisher
+- `SimTime` publisher process and published payload logs
 
-docker compose -f docker/docker-compose.yml up -d --force-recreate hakoniwa-pdu-foxglove
-docker compose -f docker/docker-compose.yml logs --tail=30 hakoniwa-pdu-foxglove
-...
-published time_usec=10100000 bytes=12
-```
+Not yet verified:
 
-Foxglove UI confirmation is manual because it requires the host Foxglove app.
-
-References:
-
-- [Foxglove SDK](https://docs.foxglove.dev/docs/sdk)
-- [Foxglove WebSocket server](https://docs.foxglove.dev/docs/sdk/websocket-server)
-- [Foxglove custom schema encodings](https://docs.foxglove.dev/docs/getting-started/custom/custom-schema-encodings)
-- [foxglove/foxglove-sdk](https://github.com/foxglove/foxglove-sdk)
+- full Shadow Hand SHM -> TCP -> CDR -> Foxglove workflow
+- Shadow Hand URDF + JointState 3D visualization
 
 ## Verification strategy
 
-Automated tests must cover:
+Automated tests cover or should cover:
 
-- valid and invalid configuration parsing;
-- relative schema-path resolution;
-- PDU name-to-channel resolution through `PduDefinition`;
-- duplicate mapping rejection;
-- lifecycle idempotency;
-- `send()` before `start()`;
-- unknown PDU keys;
-- unsupported receive operations;
-- exact forwarding of the input byte sequence to the publisher boundary;
-- clean shutdown after partial startup failure.
+- valid and invalid configuration parsing
+- relative schema-path resolution
+- PDU name-to-channel resolution
+- duplicate mapping rejection
+- lifecycle idempotency
+- `send()` before `start()`
+- unknown PDU keys
+- unsupported receive operations
+- exact forwarding of input bytes
+- clean shutdown after partial startup failure
 
-The manual smoke test should:
-
-1. create a known CDR payload using a generated registry converter;
-2. publish it through an Endpoint with an injected `FoxgloveComm`;
-3. start the server on `127.0.0.1:8765`;
-4. connect from Foxglove;
-5. confirm that the topic, schema, and decoded fields appear in Raw Messages;
-6. confirm that a numeric field can be selected in Plot where applicable.
+Manual live verification checks that Foxglove sees the configured topic and
+schema and can decode the corresponding CDR fields.
 
 ## Roadmap
 
 ### Version 0.1 — Raw CDR live publication
 
-Validate the smallest useful path: explicit schema plus untouched CDR payload
-through Foxglove WebSocket.
+Current version. Explicit schema plus untouched caller-provided CDR through a
+Foxglove WebSocket server.
 
 ### Version 0.2 — Hakoniwa time integration
 
-Optionally expose the Foxglove `Time` capability and broadcast Hakoniwa
-simulation time.
+Evaluate exposing Foxglove time capability using Hakoniwa simulation time.
 
 ### Version 0.3 — Visualization mappings
 
-Add opt-in converters for selected PDU types to Foxglove native schemas such as
-pose, transforms, images, and point clouds. Keep the raw CDR path available.
+Evaluate opt-in converters for selected PDU types such as pose, transforms,
+images, and point clouds while keeping the raw CDR path available.
 
 ### Version 0.4 — Bidirectional control, only when justified
 
-Evaluate Foxglove `ClientPublish` support for command PDUs. This is not assumed
-to be necessary for the initial business pack.
+Evaluate Foxglove client-publish support for command PDUs.
+
+## References
+
+- [Foxglove SDK](https://docs.foxglove.dev/docs/sdk)
+- [Foxglove WebSocket server](https://docs.foxglove.dev/docs/sdk/websocket-server)
+- [Foxglove custom schema encodings](https://docs.foxglove.dev/docs/getting-started/custom/custom-schema-encodings)
+- [foxglove/foxglove-sdk](https://github.com/foxglove/foxglove-sdk)
+- [hakoniwa-pdu-registry](https://github.com/hakoniwalab/hakoniwa-pdu-registry)
+- [hakoniwa-pdu-endpoint](https://github.com/hakoniwalab/hakoniwa-pdu-endpoint)
+
+## License
+
+MIT. See [LICENSE](LICENSE).
