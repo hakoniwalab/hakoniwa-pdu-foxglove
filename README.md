@@ -410,30 +410,120 @@ entries from `position[]`.
 
 ### Shadow Hand 3D View in Foxglove
 
-Foxglove Raw Messages and Plot only need the `sensor_msgs/msg/JointState` topic.
-To show the hand in the Foxglove 3D panel, also provide a URDF whose joint names
-match the published `JointState.name[]` entries.
+Foxglove Raw Messages and Plot only need the
+`sensor_msgs/msg/JointState` topic.
 
-The recommended local visualization path is to keep any original Shadow Hand
-URDF/xacro and its generated Foxglove artifacts under `work/`. Do not commit
-those files. Some upstream Shadow Hand URDF sources are GPL-derived; treat them
-as local operator inputs only, not as redistributable repository content.
+For the 3D panel, use the original Shadow Robot xacro/URDF as the visualization
+model. MuJoCo remains the source of dynamics and joint state; the URDF is used
+only to define the visual kinematic model in Foxglove.
+
+The verified local flow is:
+
+```text
+Shadow Robot sr_hand.urdf.xacro
+  -> hakoniwa-mbody-registry/tools/xacro2urdf.py
+  -> plain URDF
+  -> tools/prepare_urdf.py
+       - package://PACKAGE/... -> PACKAGE/...
+       - root-joint orientation adjustment
+  -> local HTTP server
+  -> Foxglove URDF layer + Hakoniwa JointState
+```
+
+Keep upstream Shadow Robot sources and generated visualization artifacts under
+`work/`. They are local build inputs and outputs and should not be committed to
+this repository.
 
 Recommended local layout:
 
 ```text
-work/shadow_hand_source_urdf/     # optional upstream URDF/xacro/mesh inputs; gitignored
-work/urdf/shadow_hand/            # Foxglove-ready generated URDF and assets; gitignored
+work/
+├── shadow_hand_source_urdf/
+│   └── sr_common/
+│       └── sr_description/
+│           ├── robots/
+│           │   └── sr_hand.urdf.xacro
+│           └── meshes/
+└── urdf/
+    └── shadow_hand/
+        ├── shadow_hand_right.urdf
+        └── sr_description/
+            └── meshes/
 ```
 
-If `sr_common/sr_description` has been placed under
-`work/shadow_hand_source_urdf`, prepare the Foxglove-ready URDF:
+#### 1. Prepare the Shadow Robot source tree
+
+Place the upstream `sr_common/sr_description` tree under:
+
+```text
+work/shadow_hand_source_urdf/sr_common/sr_description
+```
+
+Copy `sr_description` into the directory that will be served to Foxglove:
 
 ```bash
-python3 tools/prepare_shadow_hand_original_urdf.py
+mkdir -p work/urdf/shadow_hand
+rm -rf work/urdf/shadow_hand/sr_description
+cp -R \
+  work/shadow_hand_source_urdf/sr_common/sr_description \
+  work/urdf/shadow_hand/sr_description
 ```
 
-Serve the selected local URDF and mesh files with CORS enabled:
+#### 2. Expand xacro without ROS
+
+Use `hakoniwa-mbody-registry/tools/xacro2urdf.py`.
+
+The converter supports an explicit package mapping so ROS-style
+`$(find sr_description)` references can be resolved on macOS or Linux without a
+ROS installation:
+
+```bash
+python3 ../hakoniwa-mbody-registry/tools/xacro2urdf.py \
+  work/shadow_hand_source_urdf/sr_common/sr_description/robots/sr_hand.urdf.xacro \
+  -o work/urdf/shadow_hand/shadow_hand_right.urdf \
+  --package sr_description=work/shadow_hand_source_urdf/sr_common/sr_description \
+  --arg hand_version=E3M5 \
+  --arg side=right \
+  --arg fingers=all \
+  --arg tip_sensors=pst
+```
+
+This step deliberately leaves generated `package://...` mesh URIs unchanged.
+
+#### 3. Prepare the URDF for Foxglove
+
+Foxglove does not resolve ROS `package://` mesh URIs. Rewrite the selected
+package URI to a relative path and align the root orientation with the
+MuJoCo Menagerie Shadow Hand model:
+
+```bash
+python3 tools/prepare_urdf.py \
+  work/urdf/shadow_hand/shadow_hand_right.urdf \
+  --package sr_description \
+  --root-joint rh_world_joint \
+  --root-rpy "-1.5707963267948966 0 -1.5707963267948966" \
+  --in-place
+```
+
+For example:
+
+```text
+package://sr_description/meshes/components/forearm/forearm_E3M5.dae
+```
+
+becomes:
+
+```text
+sr_description/meshes/components/forearm/forearm_E3M5.dae
+```
+
+The root-pose adjustment is visualization-side alignment only. It does not
+modify MuJoCo dynamics or the published JointState values.
+
+#### 4. Serve the URDF and meshes
+
+Serve the prepared URDF and the copied `sr_description` assets with CORS
+enabled:
 
 ```bash
 python3 tools/serve_static_cors.py \
@@ -441,83 +531,84 @@ python3 tools/serve_static_cors.py \
   --port 8767
 ```
 
-Then set the Foxglove URDF URL to the generated local file, for example:
+The URDF URL is:
 
 ```text
-http://127.0.0.1:8767/shadow_hand_original.urdf
+http://127.0.0.1:8767/shadow_hand_right.urdf
 ```
 
-This local-prepared URDF uses the original Shadow Hand joint names and rewrites
-mesh URLs to the local HTTP server. The expected JointState topic is:
+#### 5. Configure Foxglove
+
+Connect Foxglove to:
+
+```text
+ws://127.0.0.1:8766
+```
+
+Then:
+
+1. Add a **3D** panel.
+2. Add a **URDF** custom layer.
+3. Set the URDF source to:
+
+   ```text
+   http://127.0.0.1:8767/shadow_hand_right.urdf
+   ```
+
+4. Set the URDF control mode to **Joint states**.
+5. Set the joint-state topic to:
+
+   ```text
+   /hakoniwa/ShadowHandAsset/joint_states
+   ```
+
+6. In the 3D panel scene settings, enable:
+
+   ```text
+   Ignore COLLADA <up_axis>
+   ```
+
+   This is required for the Shadow Robot COLLADA (`.dae`) visual meshes to
+   appear with the same orientation expected by the ROS/RViz-oriented URDF
+   assets.
+
+No `/tf` publisher is required for this URDF + JointState visualization path.
+
+The joint names in the Shadow Robot URDF match the observed Shadow Hand joint
+names published by Hakoniwa, so Foxglove can animate the model directly from
+the `JointState.position[]` values.
+
+#### Troubleshooting
+
+If the hand is split into disconnected-looking mesh segments even when every
+joint position is zero, first check that **Ignore COLLADA `<up_axis>`** is
+enabled. This was the cause of the apparent mesh/link misalignment during the
+Shadow Hand validation.
+
+If the hand shape is correct but the whole model is rotated relative to the
+MuJoCo viewer, check the `rh_world_joint` root orientation applied by
+`prepare_urdf.py`.
+
+If the URDF loads but does not move, confirm that the URDF layer is using
+**Joint states** control mode and that the topic is exactly:
 
 ```text
 /hakoniwa/ShadowHandAsset/joint_states
 ```
 
-If you need a repository-owned fallback without GPL-derived URDF inputs, an
-experimental MJCF-derived URDF generator is available. Use a Python environment
-that can import `mujoco`; this is the same Python 3.12 environment used by the
-Shadow Hand demo on macOS:
+The earlier MJCF-to-URDF reverse-conversion path is not part of the recommended
+Shadow Hand Foxglove workflow. The upstream Shadow Robot xacro is the
+authoritative visualization model; MuJoCo Menagerie remains the authoritative
+physics model.
 
-```bash
-python3.12 tools/mjcf_shadow_hand_to_urdf.py
-```
-
-This writes gitignored local artifacts under:
-
-```text
-work/urdf/shadow_hand/shadow_hand_right.urdf
-work/urdf/shadow_hand/assets/*.compiled.obj
-```
-
-The generated URDF includes the 24 observed Shadow Hand joints published by
-`/hakoniwa/ShadowHandAsset/joint_states`. It is a visualization contract for
-Foxglove, not a new physics model. MuJoCo remains the source of dynamics,
-actuators, and tendon coupling.
-
-For this model, do not point Foxglove directly at the original OBJ assets.
-MuJoCo recenters and reorients mesh assets during compilation, then stores the
-body-local visual placement in the compiled model. The generator therefore reads
-MuJoCo's compiled `mjModel` and exports body-local `*.compiled.obj` files whose
-vertices already include the visual geom pose. This avoids relying on a
-lossy MJCF-to-URDF reverse conversion for visual mesh placement.
-
-This MJCF-derived path is useful for debugging and license-clean fallback
-experiments, but it may not render Shadow Hand as accurately as an original
-URDF/xacro-based local visualization artifact.
-
-The long-running browser launch config starts this server automatically after
-the conductor-owning Shadow Hand asset:
+The long-running browser launch config can start the static server together
+with the other smoke-test processes after the prepared URDF has been generated:
 
 ```bash
 PYTHONPATH=../hakoniwa-mujoco-robots/thirdparty/hakoniwa-core-pro/launcher \
 python3.12 -m hako_launch.hako_launcher \
   launch/shadow-hand-foxglove-browser.launch.json
 ```
-
-In Foxglove:
-
-1. Connect to `ws://127.0.0.1:8766`.
-2. Add a **3D** panel.
-3. Set the 3D panel display frame to `map` or `world`. The bridge publishes
-   `/tf` as an identity `map -> world` transform so the panel has a fixed frame.
-4. Add a **URDF** custom layer.
-5. Set the URDF source to URL:
-
-   ```text
-   http://127.0.0.1:8767/shadow_hand_original.urdf
-   ```
-
-6. Set the URDF control mode to joint states, then set the joint state control
-   topic to:
-
-   ```text
-   /hakoniwa/ShadowHandAsset/joint_states
-   ```
-
-7. Confirm the hand mesh appears and the fingers move with the sender. If the
-   URDF link list shows missing-link warnings while the topic data is visible,
-   first check that the URDF layer is not in transform-control mode.
 
 ## Docker Live Smoke
 
