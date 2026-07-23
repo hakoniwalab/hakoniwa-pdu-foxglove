@@ -10,8 +10,8 @@ import sys
 import time
 from pathlib import Path
 
-from python.sensor_msgs.pdu_cdr_conv_JointState import py_to_cdr_JointState
-from python.sensor_msgs.pdu_conv_JointState import pdu_to_py_JointState
+from hakoniwa_pdu.pdu_msgs.sensor_msgs.pdu_cdr_conv_JointState import py_to_cdr_JointState
+from hakoniwa_pdu.pdu_msgs.sensor_msgs.pdu_conv_JointState import pdu_to_py_JointState
 from hakoniwa_pdu_endpoint.c_endpoint import Endpoint, EndpointError, PduKey
 
 
