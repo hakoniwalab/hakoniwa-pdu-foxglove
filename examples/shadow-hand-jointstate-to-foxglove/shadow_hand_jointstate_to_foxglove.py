@@ -12,18 +12,14 @@ from pathlib import Path
 
 from python.sensor_msgs.pdu_cdr_conv_JointState import py_to_cdr_JointState
 from python.sensor_msgs.pdu_conv_JointState import pdu_to_py_JointState
-from python.tf2_msgs.pdu_cdr_conv_TFMessage import py_to_cdr_TFMessage
-from python.tf2_msgs.pdu_pytype_TFMessage import TFMessage
-from python.geometry_msgs.pdu_pytype_TransformStamped import TransformStamped
 from hakoniwa_pdu_endpoint.c_endpoint import Endpoint, EndpointError, PduKey
 
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_ENDPOINT_CONFIG = REPO_ROOT / "config/shadow_hand_bridge/endpoint/shadow-hand-tcp-server.json"
-DEFAULT_FOXGLOVE_ENDPOINT_CONFIG = REPO_ROOT / "config/shadow_hand/endpoint_foxglove_jointstate_tf.json"
+#DEFAULT_FOXGLOVE_ENDPOINT_CONFIG = REPO_ROOT / "config/shadow_hand/endpoint_foxglove_jointstate_tf.json"
+DEFAULT_FOXGLOVE_ENDPOINT_CONFIG = REPO_ROOT / "config/shadow_hand/endpoint_foxglove_jointstate.json"
 DEFAULT_PUBLISHER = REPO_ROOT / "build/cdr_stdin_publisher"
-JOINT_STATE_CHANNEL = 0
-TF_CHANNEL = 1
 
 
 def parse_args() -> argparse.Namespace:
@@ -50,10 +46,6 @@ def write_frame(pipe, payload: bytes) -> None:
     pipe.flush()
 
 
-def write_multiplex_frame(pipe, channel_index: int, payload: bytes) -> None:
-    pipe.write(struct.pack("<HI", channel_index, len(payload)))
-    pipe.write(payload)
-    pipe.flush()
 
 
 def compact_joint_state(joint_state) -> str:
@@ -63,31 +55,6 @@ def compact_joint_state(joint_state) -> str:
         parts.append(f"{name}={position:.3f}")
     return " ".join(parts)
 
-
-def make_world_tf(sec: int, nanosec: int) -> TFMessage:
-    transform = TransformStamped()
-    transform.header.stamp.sec = sec
-    transform.header.stamp.nanosec = nanosec
-    transform.header.frame_id = "map"
-    transform.child_frame_id = "world"
-    transform.transform.translation.x = 0.0
-    transform.transform.translation.y = 0.0
-    transform.transform.translation.z = 0.0
-    transform.transform.rotation.x = 0.0
-    transform.transform.rotation.y = 0.0
-    transform.transform.rotation.z = 0.0
-    transform.transform.rotation.w = 1.0
-
-    message = TFMessage()
-    message.transforms = [transform]
-    return message
-
-
-def wall_time_stamp() -> tuple[int, int]:
-    now = time.time()
-    sec = int(now)
-    nanosec = int((now - sec) * 1_000_000_000)
-    return sec, nanosec
 
 
 def main() -> int:
@@ -112,7 +79,7 @@ def main() -> int:
         return 1
 
     proc = subprocess.Popen(
-        [publisher, "--endpoint-config", foxglove_endpoint_config, "--multiplex"],
+        [publisher, "--endpoint-config", foxglove_endpoint_config],
         stdin=subprocess.PIPE,
     )
     assert proc.stdin is not None
@@ -127,14 +94,8 @@ def main() -> int:
     interval = 1.0 / args.rate_hz
     sent = 0
     skipped = 0
-    last_tf_sent = 0.0
     try:
         while args.samples == 0 or sent < args.samples:
-            now = time.monotonic()
-            if now - last_tf_sent >= 0.5:
-                sec, nanosec = wall_time_stamp()
-                write_multiplex_frame(proc.stdin, TF_CHANNEL, py_to_cdr_TFMessage(make_world_tf(sec, nanosec)))
-                last_tf_sent = now
             try:
                 raw = endpoint.recv_by_name(key, pdu_size)
             except EndpointError as exc:
@@ -158,14 +119,11 @@ def main() -> int:
                 time.sleep(interval)
                 continue
 
+            # debug only
+            #joint_state.position = [0.0] * len(joint_state.position)
             cdr_payload = py_to_cdr_JointState(joint_state)
-            write_multiplex_frame(proc.stdin, JOINT_STATE_CHANNEL, cdr_payload)
+            write_frame(proc.stdin, cdr_payload)
 
-            tf_message = make_world_tf(
-                getattr(joint_state.header.stamp, "sec", 0),
-                getattr(joint_state.header.stamp, "nanosec", 0),
-            )
-            write_multiplex_frame(proc.stdin, TF_CHANNEL, py_to_cdr_TFMessage(tf_message))
             if sent % 20 == 0:
                 print(
                     "sent JointState CDR "

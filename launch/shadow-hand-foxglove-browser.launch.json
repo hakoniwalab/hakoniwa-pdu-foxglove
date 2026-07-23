@@ -22,7 +22,6 @@
       "name": "shadow_hand",
       "command": "./src/cmake-build/examples/actuators/shadow_hand/shadow-hand-hakoniwa-asset",
       "args": [
-        "--no-viewer"
       ],
       "cwd": "../../hakoniwa-mujoco-robots",
       "delay_sec": 2
