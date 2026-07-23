@@ -303,50 +303,54 @@ The Shadow Hand Foxglove config references:
 work/schemas/ros2_jazzy/sensor_msgs/msg/JointState.bundle.msg
 ```
 
-`work/` is intentionally gitignored. The schema file is a **local staging
+`work/` is intentionally gitignored. The schema bundle is a **local staging
 artifact**, not a source file owned by this repository.
 
-For the verified macOS setup, the ROS 2 schema material was prepared from the
-**ROS 2 Jazzy Docker environment provided by `hakoniwa-pdu-registry`** and then
-copied into this repository's `work/schemas/ros2_jazzy/` tree.
+With a sibling `hakoniwa-pdu-registry` checkout, generate the bundle directly
+from the `hakoniwa-pdu-foxglove` repository root:
+
+```bash
+bash ../hakoniwa-pdu-registry/tools/generate_ros2msg_bundle.bash \
+  sensor_msgs/JointState \
+  -o ./work/schemas/ros2_jazzy/sensor_msgs/msg/JointState.bundle.msg
+```
+
+This is the verified macOS arm64 path. The wrapper runs non-interactively using
+the pinned `hakoniwa-pdu-registry` Docker image, pulls the image when necessary,
+and uses the ROS 2 Jazzy message definitions installed inside the container.
+The host does not need a ROS 2 runtime or generated ROS 2 Python message
+bindings for this schema-generation step.
+
+The registry tool recursively resolves `sensor_msgs/JointState` dependencies and
+writes a self-contained Foxglove/MCAP `ros2msg` bundle to the requested host
+path. The result includes `std_msgs/Header` and `builtin_interfaces/Time`.
 
 The responsibility boundary is:
 
 ```text
 hakoniwa-pdu-registry Docker / ROS 2 Jazzy
-  -> ROS message definitions and schema preparation
-  -> copy prepared JointState schema bundle
+  -> ROS .msg source definitions
+  -> recursive dependency resolution
+  -> ros2msg bundle generation
 hakoniwa-pdu-foxglove/work/schemas/ros2_jazzy/
   -> local Foxglove schema input
 ```
 
-Start the reproducible registry environment from a sibling
-`hakoniwa-pdu-registry` checkout:
+This repository deliberately does not vendor the generated ROS schema bundle.
+Keeping schema generation in `hakoniwa-pdu-registry` preserves the separation:
 
-```bash
-cd ../hakoniwa-pdu-registry
-bash docker/pull-image.bash
-bash docker/run.bash
-```
-
-The registry Docker environment currently uses ROS 2 Jazzy and contains the ROS
-standard interface packages required by `sensor_msgs/JointState`.
-
-After preparing the schema bundle in that environment, place the result at:
-
-```text
-../hakoniwa-pdu-foxglove/work/schemas/ros2_jazzy/sensor_msgs/msg/JointState.bundle.msg
-```
-
-This repository deliberately does not vendor that local ROS schema bundle.
-Keeping schema preparation in the registry environment preserves the separation:
-
-- `hakoniwa-pdu-registry`: ROS/PDU/CDR type knowledge and reproducible ROS toolchain
+- `hakoniwa-pdu-registry`: ROS/PDU/CDR type knowledge, dependency resolution, and reproducible schema generation
 - `hakoniwa-pdu-foxglove`: Foxglove transport and visualization integration
 
-The exact bundle-generation helper is not yet standardized as a public
-`hakoniwa-pdu-registry` command. Until it is, treat this step as part of the
-verified macOS recipe rather than a fully automated cross-platform setup.
+For custom message packages, the registry wrapper also accepts repeatable
+`--search-path` arguments pointing to host directories containing
+`<package>/msg/<Type>.msg` trees.
+
+> **ros2msg dependency naming:** concatenated dependency sections use the ROS
+> field-reference form, for example `MSG: std_msgs/Header`, not
+> `MSG: std_msgs/msg/Header`. The registry generator handles this conversion
+> automatically. Using the three-part form in the bundle causes Foxglove schema
+> resolution to fail for fields declared as `std_msgs/Header`.
 
 ### Run the Shadow Hand live path
 
