@@ -21,7 +21,14 @@ jobs:
       - name: Install Windows dependencies
         shell: pwsh
         run: |
-          & "$env:VCPKG_INSTALLATION_ROOT\vcpkg.exe" install boost-asio:x64-windows fastcdr:x64-windows
+          $log = Join-Path $env:RUNNER_TEMP "vcpkg-install.log"
+          & "$env:VCPKG_INSTALLATION_ROOT\vcpkg.exe" install boost-asio:x64-windows fastcdr:x64-windows *> $log
+          $code = $LASTEXITCODE
+          if ($code -ne 0) {
+            Get-Content $log -Tail 120
+            exit $code
+          }
+          Write-Host "vcpkg dependencies installed"
 
       - name: Configure
         shell: pwsh
@@ -35,7 +42,15 @@ jobs:
       - name: Build
         shell: pwsh
         run: |
-          cmake --build build-win --config Release --parallel
+          $log = Join-Path $env:RUNNER_TEMP "cmake-build.log"
+          cmake --build build-win --config Release --parallel *> $log
+          $code = $LASTEXITCODE
+          if ($code -ne 0) {
+            Write-Host "Build failed; last 160 lines follow:"
+            Get-Content $log -Tail 160
+            exit $code
+          }
+          Get-Content $log -Tail 20
 
       - name: Run tests
         shell: pwsh
