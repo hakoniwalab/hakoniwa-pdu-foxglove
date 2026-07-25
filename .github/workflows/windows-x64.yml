@@ -8,7 +8,10 @@ on:
 
 jobs:
   windows-x64:
-    runs-on: windows-latest
+    # Native Windows support was reproduced and documented against Visual Studio 2022.
+    # Pin the CI image so compiler upgrades in windows-latest do not silently change
+    # the supported baseline.
+    runs-on: windows-2022
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -20,7 +23,31 @@ jobs:
         run: |
           & "$env:VCPKG_INSTALLATION_ROOT\vcpkg.exe" install boost-asio:x64-windows fastcdr:x64-windows
 
-      - name: Build, test, and run publisher smoke
+      - name: Configure
         shell: pwsh
         run: |
-          ./tools/run_windows_smoke.ps1 -VcpkgRoot "$env:VCPKG_INSTALLATION_ROOT"
+          cmake -S . -B build-win -A x64 `
+            -DCMAKE_TOOLCHAIN_FILE="$env:VCPKG_INSTALLATION_ROOT\scripts\buildsystems\vcpkg.cmake" `
+            -DVCPKG_TARGET_TRIPLET=x64-windows `
+            -DHAKO_PDU_FOXGLOVE_BUILD_TESTS=ON `
+            -DHAKO_PDU_FOXGLOVE_BUILD_EXAMPLES=ON
+
+      - name: Build
+        shell: pwsh
+        run: |
+          cmake --build build-win --config Release --parallel
+
+      - name: Run tests
+        shell: pwsh
+        run: |
+          ctest --test-dir build-win -C Release --output-on-failure
+
+      - name: Run publisher smoke
+        shell: pwsh
+        run: |
+          ./tools/run_windows_smoke.ps1 `
+            -BuildDir build-win `
+            -Configuration Release `
+            -VcpkgRoot "$env:VCPKG_INSTALLATION_ROOT" `
+            -SkipConfigure `
+            -SkipBuild
