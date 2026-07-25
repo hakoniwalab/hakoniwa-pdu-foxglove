@@ -1,0 +1,26 @@
+name: Validate Windows x64
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+
+jobs:
+  windows-x64:
+    runs-on: windows-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Install Windows dependencies
+        shell: pwsh
+        run: |
+          & "$env:VCPKG_INSTALLATION_ROOT\vcpkg.exe" install boost-asio:x64-windows fastcdr:x64-windows
+
+      - name: Build, test, and run publisher smoke
+        shell: pwsh
+        run: |
+          ./tools/run_windows_smoke.ps1 -VcpkgRoot "$env:VCPKG_INSTALLATION_ROOT"
