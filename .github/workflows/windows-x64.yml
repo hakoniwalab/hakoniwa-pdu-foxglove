@@ -22,7 +22,7 @@ jobs:
         shell: pwsh
         run: |
           $log = Join-Path $env:RUNNER_TEMP "vcpkg-install.log"
-          & "$env:VCPKG_INSTALLATION_ROOT\vcpkg.exe" install boost-asio:x64-windows fastcdr:x64-windows *> $log
+          & "$env:VCPKG_INSTALLATION_ROOT\vcpkg.exe" install boost-asio:x64-windows boost-beast:x64-windows fastcdr:x64-windows *> $log
           $code = $LASTEXITCODE
           if ($code -ne 0) {
             Get-Content $log -Tail 120
