@@ -17,8 +17,7 @@ function Invoke-Checked {
     param(
         [Parameter(Mandatory = $true)]
         [string]$Command,
-        [Parameter(ValueFromRemainingArguments = $true)]
-        [string[]]$Arguments
+        [string[]]$Arguments = @()
     )
 
     Write-Host "> $Command $($Arguments -join ' ')"
@@ -59,14 +58,16 @@ if (-not $SkipConfigure) {
         Write-Warning "No vcpkg root was specified. CMake must be able to find Boost.Asio/Boost.Beast headers and Fast-CDR through its normal search paths."
     }
 
-    Invoke-Checked cmake @ConfigureArgs
+    Invoke-Checked -Command "cmake" -Arguments $ConfigureArgs
 }
 
 if (-not $SkipBuild) {
-    Invoke-Checked cmake --build $ResolvedBuildDir --config $Configuration --parallel
+    $BuildArgs = @("--build", $ResolvedBuildDir, "--config", $Configuration, "--parallel")
+    Invoke-Checked -Command "cmake" -Arguments $BuildArgs
 }
 
-Invoke-Checked ctest --test-dir $ResolvedBuildDir -C $Configuration --output-on-failure
+$CTestArgs = @("--test-dir", $ResolvedBuildDir, "-C", $Configuration, "--output-on-failure")
+Invoke-Checked -Command "ctest" -Arguments $CTestArgs
 
 $PublisherCandidates = @(
     (Join-Path $ResolvedBuildDir "$Configuration/cdr_publisher_example.exe"),
@@ -79,7 +80,8 @@ if ([string]::IsNullOrWhiteSpace($PublisherExe)) {
 
 $EndpointConfig = Join-Path $RepoRoot "config/sample/endpoint_foxglove.json"
 Write-Host "[run_windows_smoke.ps1] running publisher smoke with $Samples samples"
-Invoke-Checked $PublisherExe $EndpointConfig $Samples
+$PublisherArgs = @($EndpointConfig, [string]$Samples)
+Invoke-Checked -Command $PublisherExe -Arguments $PublisherArgs
 
 Write-Host "[run_windows_smoke.ps1] passed"
 Write-Host "[run_windows_smoke.ps1] note: this smoke verifies build/tests and publisher lifecycle only; it does not prove a Foxglove Desktop client can connect through the local Windows network/firewall configuration."
