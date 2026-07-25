@@ -10,7 +10,7 @@ This document covers the native Windows build and the repository smoke path. Win
 - Visual Studio 2022 with the Desktop development with C++ workload
 - CMake 3.20 or later
 - Git with recursive submodules
-- Boost headers
+- Boost.Asio and Boost.Beast headers used by `hakoniwa-pdu-endpoint`
 - Fast-CDR for the bundled examples
 
 The repository fetches the pinned Foxglove SDK automatically. For dependency discovery, vcpkg is the recommended Windows path.
@@ -19,7 +19,7 @@ Example:
 
 ```powershell
 $env:VCPKG_ROOT = "C:\path\to\vcpkg"
-& "$env:VCPKG_ROOT\vcpkg.exe" install boost-asio:x64-windows fastcdr:x64-windows
+& "$env:VCPKG_ROOT\vcpkg.exe" install boost-asio:x64-windows boost-beast:x64-windows fastcdr:x64-windows
 ```
 
 Initialize the repository submodules:
