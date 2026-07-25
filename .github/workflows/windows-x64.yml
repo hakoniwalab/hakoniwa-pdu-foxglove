@@ -52,6 +52,14 @@ jobs:
           }
           Get-Content $log -Tail 20
 
+      - name: Upload build log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows-cmake-build-log
+          path: ${{ runner.temp }}/cmake-build.log
+          if-no-files-found: ignore
+
       - name: Run tests
         shell: pwsh
         run: |
