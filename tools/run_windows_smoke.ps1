@@ -56,7 +56,7 @@ if (-not $SkipConfigure) {
         Write-Host "[run_windows_smoke.ps1] using vcpkg root: $VcpkgRoot"
     }
     else {
-        Write-Warning "No vcpkg root was specified. CMake must be able to find Boost headers and Fast-CDR through its normal search paths."
+        Write-Warning "No vcpkg root was specified. CMake must be able to find Boost.Asio/Boost.Beast headers and Fast-CDR through its normal search paths."
     }
 
     Invoke-Checked cmake @ConfigureArgs
