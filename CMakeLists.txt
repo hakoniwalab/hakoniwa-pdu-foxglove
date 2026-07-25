@@ -28,6 +28,13 @@ add_library(hakoniwa_pdu_foxglove
 )
 add_library(hakoniwa_pdu_foxglove::hakoniwa_pdu_foxglove ALIAS hakoniwa_pdu_foxglove)
 
+if(MSVC)
+  # Foxglove SDK v0.25.2's parameter.hpp has a template-specialization ordering
+  # pattern that MSVC rejects under strict two-phase lookup. Keep this workaround
+  # scoped to this consumer target until the pinned/upstream SDK no longer needs it.
+  target_compile_options(hakoniwa_pdu_foxglove PRIVATE /Zc:twoPhase-)
+endif()
+
 target_include_directories(hakoniwa_pdu_foxglove
   PUBLIC
     $<BUILD_INTERFACE:${CMAKE_CURRENT_LIST_DIR}/include>
