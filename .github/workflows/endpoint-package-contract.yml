@@ -76,7 +76,7 @@ jobs:
           cmake --build core/build --config Release --parallel 2
           cmake --install core/build --config Release --prefix "${GITHUB_WORKSPACE}/core-install"
 
-      - name: Build and install Core-enabled Endpoint callback package
+      - name: Build and install Core-enabled Endpoint package
         run: |
           cmake -S endpoint -B endpoint/build-core \
             -DCMAKE_BUILD_TYPE=Release \
@@ -89,7 +89,9 @@ jobs:
             -DHAKO_PDU_ENDPOINT_BUILD_TOOLS=OFF \
             -DHAKO_PDU_ENDPOINT_BUILD_BENCHMARKS=OFF \
             -DHAKO_PDU_ENDPOINT_INSTALL=ON
+          cmake --build endpoint/build-core --config Release --target hakoniwa_pdu_endpoint --parallel 2
           cmake --build endpoint/build-core --config Release --target hakoniwa_pdu_endpoint_core_callback --parallel 2
+          cmake --build endpoint/build-core --config Release --target hakoniwa_pdu_endpoint_core_polling --parallel 2
           cmake --install endpoint/build-core --config Release --prefix "${GITHUB_WORKSPACE}/endpoint-core-install"
 
       - name: Build Bridge web app used by repository integration
@@ -158,7 +160,7 @@ jobs:
           cmake --build core/build --config Release --parallel 2
           cmake --install core/build --config Release --prefix "${GITHUB_WORKSPACE}/core-install"
 
-      - name: Build and install Core-enabled Endpoint callback package
+      - name: Build and install Core-enabled Endpoint package
         run: |
           cmake -S endpoint -B endpoint/build-core \
             -DCMAKE_BUILD_TYPE=Release \
@@ -171,7 +173,9 @@ jobs:
             -DHAKO_PDU_ENDPOINT_BUILD_TOOLS=OFF \
             -DHAKO_PDU_ENDPOINT_BUILD_BENCHMARKS=OFF \
             -DHAKO_PDU_ENDPOINT_INSTALL=ON
+          cmake --build endpoint/build-core --config Release --target hakoniwa_pdu_endpoint --parallel 2
           cmake --build endpoint/build-core --config Release --target hakoniwa_pdu_endpoint_core_callback --parallel 2
+          cmake --build endpoint/build-core --config Release --target hakoniwa_pdu_endpoint_core_polling --parallel 2
           cmake --install endpoint/build-core --config Release --prefix "${GITHUB_WORKSPACE}/endpoint-core-install"
 
       - name: Build Bridge web app used by repository integration
@@ -248,7 +252,7 @@ jobs:
           cmake --build core/build --config Release --parallel 2
           cmake --install core/build --config Release --prefix "$env:GITHUB_WORKSPACE/core-install"
 
-      - name: Build and install Core-enabled Endpoint callback package
+      - name: Build and install Core-enabled Endpoint package
         shell: pwsh
         run: |
           $prefixPath = "$env:GITHUB_WORKSPACE/core-install"
@@ -264,7 +268,9 @@ jobs:
             -DHAKO_PDU_ENDPOINT_BUILD_TOOLS=OFF `
             -DHAKO_PDU_ENDPOINT_BUILD_BENCHMARKS=OFF `
             -DHAKO_PDU_ENDPOINT_INSTALL=ON
+          cmake --build endpoint/build-core --config Release --target hakoniwa_pdu_endpoint --parallel 2
           cmake --build endpoint/build-core --config Release --target hakoniwa_pdu_endpoint_core_callback --parallel 2
+          cmake --build endpoint/build-core --config Release --target hakoniwa_pdu_endpoint_core_polling --parallel 2
           cmake --install endpoint/build-core --config Release --prefix "$env:GITHUB_WORKSPACE/endpoint-core-install"
 
       - name: Build Bridge web app used by repository integration
