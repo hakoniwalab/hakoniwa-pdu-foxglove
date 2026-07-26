@@ -266,6 +266,218 @@ The verified Shadow Hand path reuses existing Hakoniwa components rather than
 putting Hakoniwa shared-memory and type-conversion responsibility into the
 Foxglove adapter.
 
+### Build the local demo binaries
+
+The Shadow Hand launcher intentionally runs repository-local application
+binaries. This prevents an older Bridge, Endpoint, Foxglove publisher, or MuJoCo
+asset installed elsewhere on the machine from being mixed into the demo.
+
+Endpoint and Bridge use their manifest-driven build entrypoints. The manifests
+describe platform-neutral capability intent; `tools/hako.py` resolves compiler,
+architecture, shared-library, dependency, and CMake details for the current
+host. Raw CMake commands are not the primary Endpoint/Bridge build contract.
+
+The integration-owned manifests are:
+
+```text
+config/manifests/endpoint-core-free.yaml
+config/manifests/endpoint-core-callback.yaml
+config/manifests/bridge-shadow-hand.yaml
+```
+
+Hakoniwa Core keeps its normal installed prefix. It defaults to
+`/usr/local/hakoniwa` and can be changed with `HAKONIWA_CORE_ROOT`. Two Endpoint
+packages built specifically for this demo are installed under the ignored local
+`work/install` directory so the Core-free and callback contracts cannot be
+mixed through one CMake cache.
+
+From the `hakoniwa-pdu-foxglove` repository root, initialize the submodules and
+define the build prefixes:
+
+```bash
+git submodule update --init --recursive
+
+export WORKSPACE_DIR="$(cd .. && pwd -P)"
+export HAKONIWA_CORE_ROOT="${HAKONIWA_CORE_ROOT:-/usr/local/hakoniwa}"
+export HAKO_PYTHON="${HAKO_PYTHON:-python3.12}"
+export HAKONIWA_ENDPOINT_CORE_FREE_PREFIX="${HAKONIWA_ENDPOINT_CORE_FREE_PREFIX:-$PWD/work/install/endpoint-core-free}"
+export HAKONIWA_ENDPOINT_CORE_PREFIX="${HAKONIWA_ENDPOINT_CORE_PREFIX:-$PWD/work/install/endpoint-core}"
+```
+
+Python 3.12 is the common Hakoniwa Core/runtime prerequisite defined by the
+Hakoniwa Runtime Primer; this demo only selects that interpreter consistently
+for manifest resolution and Python bindings.
+
+When the sibling Business Pack repository is available, run the common runtime
+preflight before building:
+
+```bash
+(
+  cd "$WORKSPACE_DIR/hakoniwa-business-pack"
+  bash tools/doctor.bash
+)
+```
+
+Resolve, build, test, and locally install the Core-free Endpoint package
+consumed by Foxglove:
+
+```bash
+"$HAKO_PYTHON" hakoniwa-pdu-endpoint/tools/hako.py doctor \
+  --config config/manifests/endpoint-core-free.yaml
+"$HAKO_PYTHON" hakoniwa-pdu-endpoint/tools/hako.py configure --dry-run \
+  --config config/manifests/endpoint-core-free.yaml
+"$HAKO_PYTHON" hakoniwa-pdu-endpoint/tools/hako.py build \
+  --config config/manifests/endpoint-core-free.yaml
+"$HAKO_PYTHON" hakoniwa-pdu-endpoint/tools/hako.py test \
+  --config config/manifests/endpoint-core-free.yaml
+cmake --install work/build/manifest/endpoint-core-free --config Release \
+  --prefix "$HAKONIWA_ENDPOINT_CORE_FREE_PREFIX"
+```
+
+Build and locally install the separate Core-enabled Endpoint package used by
+Bridge and the Python Shadow Hand sender. `BUILD_SHARED_LIBS=ON` is required
+because the sender loads the explicit `core_callback` library at runtime; the
+manifest expresses this as `build.shared: true` and `bindings.python: true`.
+
+```bash
+HAKONIWA_CORE_ROOT="$HAKONIWA_CORE_ROOT" \
+"$HAKO_PYTHON" hakoniwa-pdu-endpoint/tools/hako.py doctor \
+  --config config/manifests/endpoint-core-callback.yaml
+HAKONIWA_CORE_ROOT="$HAKONIWA_CORE_ROOT" \
+"$HAKO_PYTHON" hakoniwa-pdu-endpoint/tools/hako.py configure --dry-run \
+  --config config/manifests/endpoint-core-callback.yaml
+HAKONIWA_CORE_ROOT="$HAKONIWA_CORE_ROOT" \
+"$HAKO_PYTHON" hakoniwa-pdu-endpoint/tools/hako.py build \
+  --config config/manifests/endpoint-core-callback.yaml
+HAKONIWA_CORE_ROOT="$HAKONIWA_CORE_ROOT" \
+"$HAKO_PYTHON" hakoniwa-pdu-endpoint/tools/hako.py test \
+  --config config/manifests/endpoint-core-callback.yaml
+cmake --install work/build/manifest/endpoint-core-callback --config Release \
+  --prefix "$HAKONIWA_ENDPOINT_CORE_PREFIX"
+```
+
+Each manifest run writes the resolved host configuration and generated CMake
+arguments under `hakoniwa-pdu-endpoint/.hako/`. Preserve those files when
+reporting a platform-specific build problem.
+
+Build Foxglove against the installed Core-free base Endpoint target:
+
+```bash
+cmake -S . -B build \
+  -DCMAKE_BUILD_TYPE=Release \
+  -DCMAKE_PREFIX_PATH="$HAKONIWA_ENDPOINT_CORE_FREE_PREFIX" \
+  -DHAKO_PDU_FOXGLOVE_BUILD_EXAMPLES=ON \
+  -DHAKO_PDU_FOXGLOVE_BUILD_TESTS=ON \
+  -DHAKO_PDU_FOXGLOVE_USE_BUNDLED_ENDPOINT=OFF
+cmake --build build --config Release --parallel 4
+ctest --test-dir build -C Release --output-on-failure
+```
+
+Resolve and build the sibling Bridge web application against the installed
+`core_callback` Endpoint target:
+
+```bash
+(
+  cd "$WORKSPACE_DIR/hakoniwa-pdu-bridge-core"
+  export HAKO_PDU_ENDPOINT_ROOT="$HAKONIWA_ENDPOINT_CORE_PREFIX"
+  export HAKONIWA_CORE_ROOT
+  "$HAKO_PYTHON" tools/hako.py doctor \
+    --config ../hakoniwa-pdu-foxglove/config/manifests/bridge-shadow-hand.yaml
+  "$HAKO_PYTHON" tools/hako.py configure --dry-run \
+    --config ../hakoniwa-pdu-foxglove/config/manifests/bridge-shadow-hand.yaml
+  "$HAKO_PYTHON" tools/hako.py build \
+    --config ../hakoniwa-pdu-foxglove/config/manifests/bridge-shadow-hand.yaml
+  "$HAKO_PYTHON" tools/hako.py test \
+    --config ../hakoniwa-pdu-foxglove/config/manifests/bridge-shadow-hand.yaml
+)
+```
+
+The resolved Bridge configuration is recorded under
+`hakoniwa-pdu-bridge-core/.hako/`.
+
+Build the local Shadow Hand MuJoCo asset against the same Core and Endpoint
+prefixes. `hakoniwa-mujoco-robots` does not currently provide the same
+`hakoniwa-build.yaml` interface, so this step uses that repository's supported
+build wrapper. If its existing build directory was configured with different
+Core or Endpoint prefixes, run `bash build.bash clean` once before rebuilding;
+CMake package locations are cached.
+
+```bash
+(
+  cd "$WORKSPACE_DIR/hakoniwa-mujoco-robots"
+  HAKONIWA_CORE_ROOT="$HAKONIWA_CORE_ROOT" \
+  HAKONIWA_PDU_ENDPOINT_ROOT="$HAKONIWA_ENDPOINT_CORE_PREFIX" \
+  bash build.bash
+)
+```
+
+When testing a local Core build beside the system installation with the mmap
+backend, also set `HAKO_CONFIG_PATH` to a Core config whose `core_mmap_path`
+points to an isolated local directory. Do not reuse mmap files created by a
+different Core build.
+
+The resulting launcher contract is:
+
+| Runtime role | Local artifact | Endpoint linkage |
+|---|---|---|
+| MuJoCo Shadow Hand | `hakoniwa-mujoco-robots/src/cmake-build/.../shadow-hand-hakoniwa-asset` | local Endpoint package |
+| Foxglove publisher | `hakoniwa-pdu-foxglove/build/cdr_stdin_publisher` | Core-free base target |
+| SHM-to-TCP Bridge | `hakoniwa-pdu-bridge-core/build-shadow-hand/hakoniwa-pdu-web-bridge` | `core_callback` |
+| Python sender | local Endpoint Python source/FFI plus `work/install/endpoint-core/lib/libhakoniwa_pdu_endpoint_core_callback.*` | `core_callback` |
+
+Use separate manifests and build directories when changing Endpoint variants.
+Reconfiguring one build directory between Core-free and Core-enabled modes can
+retain an old `find_library()` result in the CMake cache.
+
+`tools/launch.bash` checks these local artifacts before starting any process.
+Set `HAKONIWA_ENDPOINT_CORE_FREE_PREFIX` and
+`HAKONIWA_ENDPOINT_CORE_PREFIX` when using different local install directories.
+`HAKONIWA_DEMO_PREFIX` remains a compatibility override for the callback
+prefix. Set `HAKO_PDU_ENDPOINT_SHARED_LIB` to select an explicit callback shared
+library directly. The launcher also selects the manifest-built local Python FFI
+through `HAKO_PDU_ENDPOINT_PYTHON_BUILD_DIR`, so an older globally installed
+Endpoint Python package cannot silently replace the demo build. Both the Core
+and local Endpoint library directories are propagated to launcher-managed
+processes.
+
+### Launch
+
+After preparing the local JointState schema and Shadow Hand visualization URDF
+described in the detailed guide, start the current browser-oriented composition
+from the repository root:
+
+```bash
+bash tools/launch.bash launch/shadow-hand-foxglove-browser.launch.json
+```
+
+Then open:
+
+```text
+https://app.foxglove.dev
+```
+
+and connect Foxglove to:
+
+```text
+ws://localhost:8766
+```
+
+`tools/launch.bash` configures the sibling Hakoniwa repository paths, verifies
+the locally built demo artifacts, selects the locally installed
+`core_callback` Endpoint shared library for the Python sender, and starts the
+launch file through the launcher provided by the installed `hakoniwa-pdu`
+Python package. Following the common Hakoniwa runtime contract, the wrapper
+uses Python 3.12 and verifies that the launcher is importable before starting
+any asset. Set `HAKO_PYTHON` or `PYTHON_CMD` only when the prepared Python 3.12
+interpreter is not available as `python3.12`.
+
+The browser launch composition starts the Shadow Hand plant, the local URDF
+server, the JointState-to-CDR publisher, the SHM-to-TCP bridge, and the bounded
+hand-motion sender. The sender is configured for 120 seconds. Stop the
+foreground launcher with Ctrl-C; it terminates the assets it started. Confirm
+that the listeners on ports 8766 and 8767 have closed before starting another
+run.
+
 The Shadow-Hand-specific bridge configuration lives under:
 
 ```text

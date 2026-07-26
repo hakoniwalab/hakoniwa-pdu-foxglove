@@ -1,0 +1,23 @@
+# Shadow Hand integration intent: build only the Hakoniwa callback web bridge.
+version: 1
+
+build:
+  type: Release
+  dir: build-shadow-hand
+  parallel: 0
+
+components:
+  library: true
+  standalone_app: false
+  hakoniwa_app: true
+  monitor: false
+
+validation:
+  tests: false
+  examples: false
+  integration_tcp: false
+
+paths:
+  pdu_endpoint_root: ""
+  hakoniwa_core_root: ""
+  vcpkg_root: ""

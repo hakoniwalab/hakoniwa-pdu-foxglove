@@ -6,10 +6,11 @@
     "env": {
       "prepend": {
         "lib_path": [
-          "${ENV:HAKONIWA_LIBPATH}"
+          "${HAKONIWA_LIBPATH}",
+          "${HAKONIWA_ENDPOINT_LIBPATH}"
         ],
         "PATH": [
-          "${ENV:HAKONIWA_BINPATH}"
+          "${HAKONIWA_BINPATH}"
         ]
       }
     },
@@ -59,7 +60,7 @@
     {
       "name": "shadow_hand_bridge",
       "activation_timing": "before_start",
-      "command": "./build/hakoniwa-pdu-web-bridge",
+      "command": "./build-shadow-hand/hakoniwa-pdu-web-bridge",
       "args": [
         "--config-root",
         "../hakoniwa-pdu-foxglove/config/shadow_hand_bridge",

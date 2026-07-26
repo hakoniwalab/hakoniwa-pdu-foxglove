@@ -1,0 +1,28 @@
+# Shadow Hand integration intent: generate the Core-aware Endpoint artifacts.
+# The manifest enables the capability; consumers select core_callback explicitly.
+version: 1
+
+build:
+  type: Release
+  dir: ../work/build/manifest/endpoint-core-callback
+  shared: true
+  parallel: 0
+
+bindings:
+  python: true
+
+features:
+  hakoniwa_core: true
+  zenoh: false
+  mqtt: false
+
+validation:
+  tests: false
+  examples: false
+  tools: false
+  benchmarks: false
+  python_import: true
+
+paths:
+  hakoniwa_core_root: ""
+  vcpkg_root: ""
