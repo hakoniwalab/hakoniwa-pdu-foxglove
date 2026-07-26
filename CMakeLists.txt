@@ -10,14 +10,35 @@ option(HAKO_PDU_FOXGLOVE_BUILD_TESTS "Build tests" ON)
 option(HAKO_PDU_FOXGLOVE_BUILD_EXAMPLES "Build examples" ON)
 option(HAKO_PDU_FOXGLOVE_FETCH_DEPS "Fetch missing pinned dependencies" ON)
 option(HAKO_PDU_FOXGLOVE_USE_SYSTEM_FOXGLOVE_SDK "Use an already-installed foxglove-sdk package" OFF)
+option(HAKO_PDU_FOXGLOVE_USE_BUNDLED_ENDPOINT "Force the bundled hakoniwa-pdu-endpoint submodule instead of an installed package" OFF)
 
-set(HAKO_PDU_ENDPOINT_BUILD_TESTS OFF CACHE BOOL "" FORCE)
-set(HAKO_PDU_ENDPOINT_BUILD_TOOLS OFF CACHE BOOL "" FORCE)
-set(HAKO_PDU_ENDPOINT_BUILD_BENCHMARKS OFF CACHE BOOL "" FORCE)
-set(HAKO_PDU_ENDPOINT_BUILD_EXAMPLES OFF CACHE BOOL "" FORCE)
-set(HAKO_PDU_ENDPOINT_INSTALL OFF CACHE BOOL "" FORCE)
-set(HAKO_PDU_ENDPOINT_ENABLE_HAKONIWA_CORE OFF CACHE BOOL "" FORCE)
-add_subdirectory(hakoniwa-pdu-endpoint)
+set(HAKO_PDU_FOXGLOVE_ENDPOINT_TARGET "")
+
+if(NOT HAKO_PDU_FOXGLOVE_USE_BUNDLED_ENDPOINT)
+  find_package(hakoniwa_pdu_endpoint CONFIG QUIET)
+  if(TARGET hakoniwa_pdu_endpoint::hakoniwa_pdu_endpoint)
+    set(HAKO_PDU_FOXGLOVE_ENDPOINT_TARGET hakoniwa_pdu_endpoint::hakoniwa_pdu_endpoint)
+    message(STATUS "Using installed hakoniwa-pdu-endpoint package")
+  endif()
+endif()
+
+if(NOT HAKO_PDU_FOXGLOVE_ENDPOINT_TARGET)
+  if(NOT EXISTS "${CMAKE_CURRENT_LIST_DIR}/hakoniwa-pdu-endpoint/CMakeLists.txt")
+    message(FATAL_ERROR
+      "hakoniwa-pdu-endpoint was not found as an installed CMake package and the bundled submodule is unavailable. "
+      "Install hakoniwa-pdu-endpoint, initialize submodules, or set CMAKE_PREFIX_PATH to its install prefix.")
+  endif()
+
+  set(HAKO_PDU_ENDPOINT_BUILD_TESTS OFF CACHE BOOL "" FORCE)
+  set(HAKO_PDU_ENDPOINT_BUILD_TOOLS OFF CACHE BOOL "" FORCE)
+  set(HAKO_PDU_ENDPOINT_BUILD_BENCHMARKS OFF CACHE BOOL "" FORCE)
+  set(HAKO_PDU_ENDPOINT_BUILD_EXAMPLES OFF CACHE BOOL "" FORCE)
+  set(HAKO_PDU_ENDPOINT_INSTALL OFF CACHE BOOL "" FORCE)
+  set(HAKO_PDU_ENDPOINT_ENABLE_HAKONIWA_CORE OFF CACHE BOOL "" FORCE)
+  add_subdirectory(hakoniwa-pdu-endpoint)
+  set(HAKO_PDU_FOXGLOVE_ENDPOINT_TARGET hakoniwa_pdu_endpoint)
+  message(STATUS "Using bundled hakoniwa-pdu-endpoint submodule")
+endif()
 
 include(cmake/FoxgloveSdk.cmake)
 
@@ -41,7 +62,7 @@ target_include_directories(hakoniwa_pdu_foxglove
 )
 target_link_libraries(hakoniwa_pdu_foxglove
   PUBLIC
-    hakoniwa_pdu_endpoint
+    ${HAKO_PDU_FOXGLOVE_ENDPOINT_TARGET}
   PRIVATE
     foxglove_cpp
 )
