@@ -1,4 +1,4 @@
-name: Endpoint Package Contract
+name: Endpoint and Bridge Package Contract
 
 on:
   push:
@@ -33,7 +33,8 @@ jobs:
       - name: Install prerequisites
         run: |
           sudo apt-get update
-          sudo apt-get install -y cmake g++ libboost-dev
+          sudo apt-get install -y cmake g++-12 libboost-dev
+          sudo update-alternatives --install /usr/bin/g++ g++ /usr/bin/g++-12 12
 
       - name: Build and install Core-free Endpoint package
         run: |
@@ -47,10 +48,10 @@ jobs:
             -DHAKO_PDU_ENDPOINT_BUILD_TOOLS=OFF \
             -DHAKO_PDU_ENDPOINT_BUILD_BENCHMARKS=OFF \
             -DHAKO_PDU_ENDPOINT_INSTALL=ON
-          cmake --build endpoint/build --config Release --parallel 2
+          cmake --build endpoint/build --config Release --target hakoniwa_pdu_endpoint --parallel 2
           cmake --install endpoint/build --config Release --prefix "${GITHUB_WORKSPACE}/endpoint-install"
 
-      - name: Configure Foxglove against installed Endpoint
+      - name: Build and test Foxglove against installed Endpoint
         run: |
           cmake -S . -B build \
             -DCMAKE_BUILD_TYPE=Release \
@@ -58,11 +59,54 @@ jobs:
             -DHAKO_PDU_FOXGLOVE_BUILD_EXAMPLES=OFF \
             -DHAKO_PDU_FOXGLOVE_BUILD_TESTS=ON \
             -DHAKO_PDU_FOXGLOVE_USE_BUNDLED_ENDPOINT=OFF
-
-      - name: Build and test
-        run: |
           cmake --build build --config Release --parallel 2
           ctest --test-dir build -C Release --output-on-failure
+
+      - name: Build and install Hakoniwa Core Pro
+        run: |
+          git clone --quiet --recursive https://github.com/hakoniwalab/hakoniwa-core-pro.git core
+          cmake -S core -B core/build \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DCMAKE_INSTALL_PREFIX="${GITHUB_WORKSPACE}/core-install" \
+            -DHAKO_CORE_CONFIG_INSTALL_DIR=etc/hakoniwa \
+            -DHAKO_CORE_PRO_BUILD_COMMAND=OFF \
+            -DHAKO_CORE_PRO_BUILD_EXAMPLES=OFF \
+            -DHAKO_CORE_PRO_BUILD_PYTHON_BINDINGS=OFF \
+            -DHAKO_ENABLE_GTEST=OFF
+          cmake --build core/build --config Release --parallel 2
+          cmake --install core/build --config Release --prefix "${GITHUB_WORKSPACE}/core-install"
+
+      - name: Build and install Core-enabled Endpoint callback package
+        run: |
+          cmake -S endpoint -B endpoint/build-core \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DCMAKE_INSTALL_PREFIX="${GITHUB_WORKSPACE}/endpoint-core-install" \
+            -DCMAKE_PREFIX_PATH="${GITHUB_WORKSPACE}/core-install" \
+            -DHAKO_PDU_ENDPOINT_ENABLE_HAKONIWA_CORE=ON \
+            -DHAKO_PDU_ENDPOINT_HAKONIWA_CORE_ROOT="${GITHUB_WORKSPACE}/core-install" \
+            -DHAKO_PDU_ENDPOINT_BUILD_TESTS=OFF \
+            -DHAKO_PDU_ENDPOINT_BUILD_EXAMPLES=OFF \
+            -DHAKO_PDU_ENDPOINT_BUILD_TOOLS=OFF \
+            -DHAKO_PDU_ENDPOINT_BUILD_BENCHMARKS=OFF \
+            -DHAKO_PDU_ENDPOINT_INSTALL=ON
+          cmake --build endpoint/build-core --config Release --target hakoniwa_pdu_endpoint_core_callback --parallel 2
+          cmake --install endpoint/build-core --config Release --prefix "${GITHUB_WORKSPACE}/endpoint-core-install"
+
+      - name: Build Bridge web app used by repository integration
+        run: |
+          git clone --quiet https://github.com/hakoniwalab/hakoniwa-pdu-bridge-core.git bridge
+          cmake -S bridge -B bridge/build-hakoniwa \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DCMAKE_PREFIX_PATH="${GITHUB_WORKSPACE}/endpoint-core-install;${GITHUB_WORKSPACE}/core-install" \
+            -DHAKO_PDU_ENDPOINT_PREFIX="${GITHUB_WORKSPACE}/endpoint-core-install" \
+            -DHAKO_PDU_BRIDGE_HAKONIWA_CORE_ROOT="${GITHUB_WORKSPACE}/core-install" \
+            -DHAKO_PDU_BRIDGE_ENABLE_HAKONIWA_CORE=ON \
+            -DHAKO_PDU_BRIDGE_BUILD_HAKONIWA_APP=ON \
+            -DHAKO_PDU_BRIDGE_BUILD_STANDALONE_APP=OFF \
+            -DHAKO_PDU_BRIDGE_BUILD_MONITOR=OFF \
+            -DHAKO_PDU_BRIDGE_BUILD_TESTS=OFF \
+            -DHAKO_PDU_BRIDGE_BUILD_EXAMPLES=OFF
+          cmake --build bridge/build-hakoniwa --config Release --target hakoniwa-pdu-web-bridge --parallel 2
 
   macos:
     name: macOS arm64
@@ -86,10 +130,10 @@ jobs:
             -DHAKO_PDU_ENDPOINT_BUILD_TOOLS=OFF \
             -DHAKO_PDU_ENDPOINT_BUILD_BENCHMARKS=OFF \
             -DHAKO_PDU_ENDPOINT_INSTALL=ON
-          cmake --build endpoint/build --config Release --parallel 2
+          cmake --build endpoint/build --config Release --target hakoniwa_pdu_endpoint --parallel 2
           cmake --install endpoint/build --config Release --prefix "${GITHUB_WORKSPACE}/endpoint-install"
 
-      - name: Configure Foxglove against installed Endpoint
+      - name: Build and test Foxglove against installed Endpoint
         run: |
           cmake -S . -B build \
             -DCMAKE_BUILD_TYPE=Release \
@@ -97,11 +141,54 @@ jobs:
             -DHAKO_PDU_FOXGLOVE_BUILD_EXAMPLES=OFF \
             -DHAKO_PDU_FOXGLOVE_BUILD_TESTS=ON \
             -DHAKO_PDU_FOXGLOVE_USE_BUNDLED_ENDPOINT=OFF
-
-      - name: Build and test
-        run: |
           cmake --build build --config Release --parallel 2
           ctest --test-dir build -C Release --output-on-failure
+
+      - name: Build and install Hakoniwa Core Pro
+        run: |
+          git clone --quiet --recursive https://github.com/hakoniwalab/hakoniwa-core-pro.git core
+          cmake -S core -B core/build \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DCMAKE_INSTALL_PREFIX="${GITHUB_WORKSPACE}/core-install" \
+            -DHAKO_CORE_CONFIG_INSTALL_DIR=etc/hakoniwa \
+            -DHAKO_CORE_PRO_BUILD_COMMAND=OFF \
+            -DHAKO_CORE_PRO_BUILD_EXAMPLES=OFF \
+            -DHAKO_CORE_PRO_BUILD_PYTHON_BINDINGS=OFF \
+            -DHAKO_ENABLE_GTEST=OFF
+          cmake --build core/build --config Release --parallel 2
+          cmake --install core/build --config Release --prefix "${GITHUB_WORKSPACE}/core-install"
+
+      - name: Build and install Core-enabled Endpoint callback package
+        run: |
+          cmake -S endpoint -B endpoint/build-core \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DCMAKE_INSTALL_PREFIX="${GITHUB_WORKSPACE}/endpoint-core-install" \
+            -DCMAKE_PREFIX_PATH="${GITHUB_WORKSPACE}/core-install" \
+            -DHAKO_PDU_ENDPOINT_ENABLE_HAKONIWA_CORE=ON \
+            -DHAKO_PDU_ENDPOINT_HAKONIWA_CORE_ROOT="${GITHUB_WORKSPACE}/core-install" \
+            -DHAKO_PDU_ENDPOINT_BUILD_TESTS=OFF \
+            -DHAKO_PDU_ENDPOINT_BUILD_EXAMPLES=OFF \
+            -DHAKO_PDU_ENDPOINT_BUILD_TOOLS=OFF \
+            -DHAKO_PDU_ENDPOINT_BUILD_BENCHMARKS=OFF \
+            -DHAKO_PDU_ENDPOINT_INSTALL=ON
+          cmake --build endpoint/build-core --config Release --target hakoniwa_pdu_endpoint_core_callback --parallel 2
+          cmake --install endpoint/build-core --config Release --prefix "${GITHUB_WORKSPACE}/endpoint-core-install"
+
+      - name: Build Bridge web app used by repository integration
+        run: |
+          git clone --quiet https://github.com/hakoniwalab/hakoniwa-pdu-bridge-core.git bridge
+          cmake -S bridge -B bridge/build-hakoniwa \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DCMAKE_PREFIX_PATH="${GITHUB_WORKSPACE}/endpoint-core-install;${GITHUB_WORKSPACE}/core-install" \
+            -DHAKO_PDU_ENDPOINT_PREFIX="${GITHUB_WORKSPACE}/endpoint-core-install" \
+            -DHAKO_PDU_BRIDGE_HAKONIWA_CORE_ROOT="${GITHUB_WORKSPACE}/core-install" \
+            -DHAKO_PDU_BRIDGE_ENABLE_HAKONIWA_CORE=ON \
+            -DHAKO_PDU_BRIDGE_BUILD_HAKONIWA_APP=ON \
+            -DHAKO_PDU_BRIDGE_BUILD_STANDALONE_APP=OFF \
+            -DHAKO_PDU_BRIDGE_BUILD_MONITOR=OFF \
+            -DHAKO_PDU_BRIDGE_BUILD_TESTS=OFF \
+            -DHAKO_PDU_BRIDGE_BUILD_EXAMPLES=OFF
+          cmake --build bridge/build-hakoniwa --config Release --target hakoniwa-pdu-web-bridge --parallel 2
 
   windows:
     name: Windows x64
@@ -119,7 +206,7 @@ jobs:
         shell: pwsh
         run: |
           git clone --quiet https://github.com/hakoniwalab/hakoniwa-pdu-endpoint.git endpoint
-          cmake -S endpoint -B endpoint/build `
+          cmake -S endpoint -B endpoint/build -A x64 `
             -DCMAKE_TOOLCHAIN_FILE="$env:VCPKG_INSTALLATION_ROOT/scripts/buildsystems/vcpkg.cmake" `
             -DVCPKG_TARGET_TRIPLET=x64-windows `
             -DCMAKE_INSTALL_PREFIX="$env:GITHUB_WORKSPACE/endpoint-install" `
@@ -129,22 +216,72 @@ jobs:
             -DHAKO_PDU_ENDPOINT_BUILD_TOOLS=OFF `
             -DHAKO_PDU_ENDPOINT_BUILD_BENCHMARKS=OFF `
             -DHAKO_PDU_ENDPOINT_INSTALL=ON
-          cmake --build endpoint/build --config Release --parallel 2
+          cmake --build endpoint/build --config Release --target hakoniwa_pdu_endpoint --parallel 2
           cmake --install endpoint/build --config Release --prefix "$env:GITHUB_WORKSPACE/endpoint-install"
 
-      - name: Configure Foxglove against installed Endpoint
+      - name: Build and test Foxglove against installed Endpoint
         shell: pwsh
         run: |
-          cmake -S . -B build `
+          cmake -S . -B build -A x64 `
             -DCMAKE_TOOLCHAIN_FILE="$env:VCPKG_INSTALLATION_ROOT/scripts/buildsystems/vcpkg.cmake" `
             -DVCPKG_TARGET_TRIPLET=x64-windows `
             -DCMAKE_PREFIX_PATH="$env:GITHUB_WORKSPACE/endpoint-install" `
             -DHAKO_PDU_FOXGLOVE_BUILD_EXAMPLES=OFF `
             -DHAKO_PDU_FOXGLOVE_BUILD_TESTS=ON `
             -DHAKO_PDU_FOXGLOVE_USE_BUNDLED_ENDPOINT=OFF
-
-      - name: Build and test
-        shell: pwsh
-        run: |
           cmake --build build --config Release --parallel 2
           ctest --test-dir build -C Release --output-on-failure
+
+      - name: Build and install Hakoniwa Core Pro
+        shell: pwsh
+        run: |
+          git clone --quiet --recursive https://github.com/hakoniwalab/hakoniwa-core-pro.git core
+          $coreOptions = "$env:GITHUB_WORKSPACE/core/cmake-options/win-cmake-options.cmake"
+          cmake -S core -B core/build -A x64 `
+            -DHAKO_CLIENT_OPTION_FILEPATH="$coreOptions" `
+            -DCMAKE_INSTALL_PREFIX="$env:GITHUB_WORKSPACE/core-install" `
+            -DHAKO_CORE_CONFIG_INSTALL_DIR=etc/hakoniwa `
+            -DHAKO_CORE_PRO_BUILD_COMMAND=OFF `
+            -DHAKO_CORE_PRO_BUILD_EXAMPLES=OFF `
+            -DHAKO_CORE_PRO_BUILD_PYTHON_BINDINGS=OFF `
+            -DHAKO_ENABLE_GTEST=OFF
+          cmake --build core/build --config Release --parallel 2
+          cmake --install core/build --config Release --prefix "$env:GITHUB_WORKSPACE/core-install"
+
+      - name: Build and install Core-enabled Endpoint callback package
+        shell: pwsh
+        run: |
+          $prefixPath = "$env:GITHUB_WORKSPACE/core-install"
+          cmake -S endpoint -B endpoint/build-core -A x64 `
+            -DCMAKE_TOOLCHAIN_FILE="$env:VCPKG_INSTALLATION_ROOT/scripts/buildsystems/vcpkg.cmake" `
+            -DVCPKG_TARGET_TRIPLET=x64-windows `
+            -DCMAKE_INSTALL_PREFIX="$env:GITHUB_WORKSPACE/endpoint-core-install" `
+            -DCMAKE_PREFIX_PATH="$prefixPath" `
+            -DHAKO_PDU_ENDPOINT_ENABLE_HAKONIWA_CORE=ON `
+            -DHAKO_PDU_ENDPOINT_HAKONIWA_CORE_ROOT="$env:GITHUB_WORKSPACE/core-install" `
+            -DHAKO_PDU_ENDPOINT_BUILD_TESTS=OFF `
+            -DHAKO_PDU_ENDPOINT_BUILD_EXAMPLES=OFF `
+            -DHAKO_PDU_ENDPOINT_BUILD_TOOLS=OFF `
+            -DHAKO_PDU_ENDPOINT_BUILD_BENCHMARKS=OFF `
+            -DHAKO_PDU_ENDPOINT_INSTALL=ON
+          cmake --build endpoint/build-core --config Release --target hakoniwa_pdu_endpoint_core_callback --parallel 2
+          cmake --install endpoint/build-core --config Release --prefix "$env:GITHUB_WORKSPACE/endpoint-core-install"
+
+      - name: Build Bridge web app used by repository integration
+        shell: pwsh
+        run: |
+          git clone --quiet https://github.com/hakoniwalab/hakoniwa-pdu-bridge-core.git bridge
+          $prefixPath = "$env:GITHUB_WORKSPACE/endpoint-core-install;$env:GITHUB_WORKSPACE/core-install"
+          cmake -S bridge -B bridge/build-hakoniwa -A x64 `
+            -DCMAKE_TOOLCHAIN_FILE="$env:VCPKG_INSTALLATION_ROOT/scripts/buildsystems/vcpkg.cmake" `
+            -DVCPKG_TARGET_TRIPLET=x64-windows `
+            -DCMAKE_PREFIX_PATH="$prefixPath" `
+            -DHAKO_PDU_ENDPOINT_PREFIX="$env:GITHUB_WORKSPACE/endpoint-core-install" `
+            -DHAKO_PDU_BRIDGE_HAKONIWA_CORE_ROOT="$env:GITHUB_WORKSPACE/core-install" `
+            -DHAKO_PDU_BRIDGE_ENABLE_HAKONIWA_CORE=ON `
+            -DHAKO_PDU_BRIDGE_BUILD_HAKONIWA_APP=ON `
+            -DHAKO_PDU_BRIDGE_BUILD_STANDALONE_APP=OFF `
+            -DHAKO_PDU_BRIDGE_BUILD_MONITOR=OFF `
+            -DHAKO_PDU_BRIDGE_BUILD_TESTS=OFF `
+            -DHAKO_PDU_BRIDGE_BUILD_EXAMPLES=OFF
+          cmake --build bridge/build-hakoniwa --config Release --target hakoniwa-pdu-web-bridge --parallel 2
